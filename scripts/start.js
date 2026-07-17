@@ -199,6 +199,8 @@ async function configure() {
     console.log(`    账号: ${cfg.email}`);
     const ans = await ask('  使用现有配置? (Y/n): ');
     if (ans.toLowerCase() !== 'n') return cfg;
+    // Reset so all fields are re-asked
+    cfg = {};
   }
 
   // API Key
