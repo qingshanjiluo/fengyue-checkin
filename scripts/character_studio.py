@@ -17,7 +17,11 @@ from hotlist_scraper import fetch_ranking, extract_cards, format_for_ai, RANKING
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(__file__), "templates"))
 
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "studio_settings.json")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(SCRIPT_DIR, "..", "generated_imgs")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "studio_settings.json")
 tasks = {}
 tasks_lock = threading.Lock()
 hotlist_cache = {"data": None, "time": 0, "ranking": None}
@@ -67,6 +71,74 @@ def api_list_models():
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:200]
         return jsonify({"ok": False, "error": f"HTTP {e.code}: {body}"}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+# ── 图片库 ─────────────────────────────────────────────────
+
+ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+
+@app.route("/uploads/<path:filename>")
+def serve_upload(filename):
+    return flask.send_from_directory(UPLOAD_FOLDER, filename)
+
+@app.route("/api/images", methods=["GET"])
+def api_list_images():
+    files = []
+    for fname in os.listdir(UPLOAD_FOLDER):
+        ext = os.path.splitext(fname)[1].lower()
+        if ext not in ALLOWED_EXT:
+            continue
+        fpath = os.path.join(UPLOAD_FOLDER, fname)
+        stat = os.stat(fpath)
+        info = {
+            "name": fname,
+            "size": stat.st_size,
+            "mtime": stat.st_mtime,
+            "url": f"/uploads/{fname}",
+            "thumb": f"/uploads/{fname}",
+        }
+        # Try to read dimensions
+        if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
+            try:
+                from PIL import Image
+                with Image.open(fpath) as img:
+                    info["width"], info["height"] = img.size
+            except Exception:
+                pass
+        files.append(info)
+    files.sort(key=lambda f: f["mtime"], reverse=True)
+    return jsonify({"ok": True, "images": files})
+
+@app.route("/api/images/upload", methods=["POST"])
+def api_upload_image():
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "No file"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"ok": False, "error": "Empty filename"}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ALLOWED_EXT:
+        return jsonify({"ok": False, "error": f"Unsupported format: {ext}"}), 400
+    # Save with unique name if exists
+    save_name = f.filename
+    base, ext2 = os.path.splitext(save_name)
+    counter = 1
+    while os.path.exists(os.path.join(UPLOAD_FOLDER, save_name)):
+        save_name = f"{base}_{counter}{ext2}"
+        counter += 1
+    f.save(os.path.join(UPLOAD_FOLDER, save_name))
+    return jsonify({"ok": True, "name": save_name, "url": f"/uploads/{save_name}"})
+
+@app.route("/api/images/<name>", methods=["DELETE"])
+def api_delete_image(name):
+    # Prevent path traversal
+    safe = os.path.basename(name)
+    fpath = os.path.join(UPLOAD_FOLDER, safe)
+    if os.path.exists(fpath):
+        os.remove(fpath)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Not found"}), 404
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
@@ -160,14 +232,25 @@ def api_chat():
     "char_appearance": "外貌描述",
     "char_personality": "角色性格",
     "char_tone": "说话语气/口吻",
-    "char_background": "背景设定"
+    "char_background": "背景设定",
+    "cover_image": "图片文件名（从下方可用图片中选择，留空自动生成）",
+    "chat_bg_image": "聊天背景图片文件名（从下方可用图片中选择，留空自动生成）",
+    "mobile_bg_image": "移动端背景图片文件名（从下方可用图片中选择，留空自动生成）"
   }
 }
 注意：
 - 如果用户描述不完整，请合理补充细节
 - 所有字段都用中文
 - char_age 填数字字符串如 "18"
+- cover_image/chat_bg_image/mobile_bg_image 从下方可用图片中选择文件名
 - 输出纯 JSON，不要 markdown"""
+    # Append available images to system prompt
+    available = []
+    for fname in os.listdir(UPLOAD_FOLDER):
+        if os.path.splitext(fname)[1].lower() in ALLOWED_EXT:
+            available.append(fname)
+    if available:
+        system_prompt += f"\n\n可用图片文件（文件名列表）:\n" + "\n".join(f"- {f}" for f in available)
 
     try:
         resp = client.chat.completions.create(
@@ -270,12 +353,29 @@ def run_automation(task_id):
             update(error="请先在设置中配置风月账号邮箱和密码")
             return
 
-        # Generate test images if needed
+        # Images from AI selection or settings
+        img_dir = UPLOAD_FOLDER
+
         cover_path = settings.get("cover", "")
         chat_bg_path = settings.get("chat_bg", "")
         mobile_bg_path = settings.get("mobile_bg", "")
 
-        img_dir = os.path.join(os.path.dirname(__file__), "..", "generated_imgs")
+        # Prefer AI-suggested images
+        ai_cover = char.get("cover_image", "")
+        ai_chat_bg = char.get("chat_bg_image", "")
+        ai_mobile_bg = char.get("mobile_bg_image", "")
+
+        for ai_name, cfg_key in [(ai_cover, "cover"), (ai_chat_bg, "chat_bg"), (ai_mobile_bg, "mobile_bg")]:
+            if ai_name:
+                ai_path = os.path.join(img_dir, os.path.basename(ai_name))
+                if os.path.exists(ai_path):
+                    if cfg_key == "cover":
+                        cover_path = ai_path
+                    elif cfg_key == "chat_bg":
+                        chat_bg_path = ai_path
+                    elif cfg_key == "mobile_bg":
+                        mobile_bg_path = ai_path
+
         os.makedirs(img_dir, exist_ok=True)
 
         if not cover_path or not os.path.exists(cover_path):

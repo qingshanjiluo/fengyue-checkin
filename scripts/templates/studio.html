@@ -83,6 +83,20 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
 .model-check{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;cursor:pointer;font-size:12px}
 .model-check:hover{background:#1a1a2e}
 .model-check input{accent-color:#7c3aed}
+.imglib-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px}
+.imglib-item{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:6px;overflow:hidden;cursor:pointer;position:relative;transition:border-color .2s}
+.imglib-item:hover{border-color:#7c3aed}
+.imglib-item img{width:100%;height:80px;object-fit:cover;display:block}
+.imglib-item .name{font-size:10px;padding:3px 6px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imglib-item .actions{position:absolute;top:4px;right:4px;display:none;gap:3px}
+.imglib-item:hover .actions{display:flex}
+.imglib-item .actions button{padding:2px 5px;font-size:10px;border:none;border-radius:3px;cursor:pointer}
+.imglib-item .actions .use{background:#7c3aed;color:#fff}
+.imglib-item .actions .del{background:#ef4444;color:#fff}
+.imglib-upload{text-align:center;padding:12px}
+.imglib-upload input{display:none}
+.imglib-upload label{padding:8px 16px;background:#2a2a4a;border-radius:6px;font-size:12px;cursor:pointer;border:1px dashed #3a3a5a;display:inline-block}
+.imglib-upload label:hover{background:#3a3a5a}
 @media(max-width:768px){.sidebar{width:100%;min-width:100%;display:none}.sidebar.open{display:flex;position:fixed;top:0;left:0;bottom:0;z-index:100}.container{flex-direction:column}}
 </style>
 </head>
@@ -101,6 +115,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
   <div class="sidebar" id="sidebar">
     <div class="sidebar-tabs">
       <button class="stab active" data-panel="settings" onclick="switchPanel('settings')">⚙ 设置</button>
+      <button class="stab" data-panel="images" onclick="switchPanel('images')">📷 图片</button>
       <button class="stab" data-panel="hotlist" onclick="switchPanel('hotlist')">🔥 热榜</button>
     </div>
     <div class="settings-panel" id="panel-settings">
@@ -155,6 +170,15 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
       </div>
 
       <button class="btn-save" onclick="saveSettings()">💾 保存设置</button>
+    </div>
+    <div class="hotlist-panel" id="panel-images" style="display:none">
+      <div class="imglib-upload">
+        <label for="imgUpload">📤 上传图片</label>
+        <input type="file" id="imgUpload" accept="image/*" multiple onchange="uploadImages(this.files)">
+      </div>
+      <div class="imglib-grid" id="imgGrid">
+        <div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">加载中...</div>
+      </div>
     </div>
     <div class="hotlist-panel" id="panel-hotlist" style="display:none">
       <div class="hotlist-header">
@@ -557,6 +581,102 @@ async function pollProgress(tid, steps) {
 }
 
 loadSettings();
+</script>
+
+<script>
+// ── 图片库 ─────────────────────────────────────────────────
+
+async function loadImages() {
+  const grid = document.getElementById('imgGrid');
+  grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">加载中...</div>';
+  try {
+    const r = await fetch(BASE + 'api/images');
+    const data = await r.json();
+    if (!data.ok || !data.images) {
+      grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#ef4444;font-size:13px;grid-column:1/-1">⚠️ 加载失败</div>';
+      return;
+    }
+    if (data.images.length === 0) {
+      grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">暂无图片，点击上方上传</div>';
+      return;
+    }
+    grid.innerHTML = data.images.map(img => {
+      const dims = (img.width && img.height) ? `${img.width}×${img.height}` : '';
+      return '<div class="imglib-item" title="' + img.name + '">' +
+        '<img src="' + img.thumb + '?t=' + Date.now() + '" loading="lazy">' +
+        '<div class="name">' + escHtml(img.name) + (dims ? ' (' + dims + ')' : '') + '</div>' +
+        '<div class="actions">' +
+          '<button class="use" onclick="event.stopPropagation();useImageAsCover(\'' + img.name.replace(/'/g,"\\'") + '\')">📺</button>' +
+          '<button class="use" onclick="event.stopPropagation();useImageAsBg(\'' + img.name.replace(/'/g,"\\'") + '\')">💬</button>' +
+          '<button class="use" onclick="event.stopPropagation();useImageAsMobile(\'' + img.name.replace(/'/g,"\\'") + '\')">📱</button>' +
+          '<button class="del" onclick="event.stopPropagation();deleteImage(\'' + img.name.replace(/'/g,"\\'") + '\')">✕</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#ef4444;font-size:13px;grid-column:1/-1">⚠️ 请求失败: ' + e.message + '</div>';
+  }
+}
+
+async function uploadImages(files) {
+  if (!files || files.length === 0) return;
+  setStatus('上传中...', true);
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch(BASE + 'api/images/upload', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (data.ok) showToast('✅ 已上传: ' + data.name);
+      else showToast('⚠️ ' + (data.error || '上传失败'));
+    } catch(e) {
+      showToast('⚠️ 上传失败: ' + e.message);
+    }
+  }
+  setStatus('就绪', false);
+  document.getElementById('imgUpload').value = '';
+  loadImages();
+}
+
+async function deleteImage(name) {
+  if (!confirm('确定删除 ' + name + ' ？')) return;
+  try {
+    const r = await fetch(BASE + 'api/images/' + encodeURIComponent(name), { method: 'DELETE' });
+    const data = await r.json();
+    if (data.ok) { showToast('已删除'); loadImages(); }
+    else showToast('⚠️ ' + (data.error || '删除失败'));
+  } catch(e) {
+    showToast('⚠️ ' + e.message);
+  }
+}
+
+function useImageAsCover(name) {
+  const fullPath = document.getElementById('s-cover');
+  fullPath.value = 'G:\\皮皮\\编程项目\\fengyue\\generated_imgs\\' + name;
+  switchPanel('settings');
+  showToast('✅ 已设为封面: ' + name);
+}
+
+function useImageAsBg(name) {
+  const fullPath = document.getElementById('s-chatbg');
+  fullPath.value = 'G:\\皮皮\\编程项目\\fengyue\\generated_imgs\\' + name;
+  switchPanel('settings');
+  showToast('✅ 已设聊天背景: ' + name);
+}
+
+function useImageAsMobile(name) {
+  const fullPath = document.getElementById('s-mobilebg');
+  fullPath.value = 'G:\\皮皮\\编程项目\\fengyue\\generated_imgs\\' + name;
+  switchPanel('settings');
+  showToast('✅ 已设移动背景: ' + name);
+}
+
+// Override switchPanel to load images when switching to image tab
+const _origSwitchPanel = switchPanel;
+switchPanel = function(name) {
+  _origSwitchPanel(name);
+  if (name === 'images') loadImages();
+};
 </script>
 </body>
 </html>
