@@ -1,0 +1,33 @@
+host: aiaha.xyz
+content-length: 106
+sec-ch-ua-full-version-list: "Not;A=Brand";v="8.0.0.0", "Chromium";v="150.0.7871.115", "Google Chrome";v="150.0.7871.115"
+sec-ch-ua-platform: "Windows"
+authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWE2MGRlN2ItYmI1NC00MjQ2LWI2OTMtNmNjYjI3NmZjMWVlIiwiZXhwIjoxNzg0NTk2NDQyLCJpc3MiOiJTRUxGX0hPU1RFRCIsInN1YiI6IkNvbnNvbGUgQVBJIFBhc3Nwb3J0IiwicHdkX3ZlcnNpb24iOiJkODgxMTJmMDg5In0.Cy4pFaTAp7Ia7H8SIZIBeibyfWVoDT2Orh9CIPBax54
+sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"
+x-timezone: Asia/Shanghai
+sec-ch-ua-model: ""
+sec-ch-ua-mobile: ?0
+x-language: zh-Hans
+sec-ch-ua-arch: "x86"
+user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+content-type: application/json
+sec-ch-ua-platform-version: "10.0.0"
+accept: */*
+origin: https://aiaha.xyz
+sec-fetch-site: same-origin
+sec-fetch-mode: cors
+sec-fetch-dest: empty
+referer: https://aiaha.xyz/zh/signin
+accept-encoding: gzip, deflate, br, zstd
+accept-language: zh-CN,zh;q=0.9
+cookie: locale=zh-Hans
+cookie: _ga=GA1.1.906480475.1782004419
+cookie: _ga_PPTNWCT10Y=GS2.1.s1782004637$o1$g1$t1782008500$j60$l0$h0
+cookie: x-domain=aiaha.xyz
+cookie: x-hostname=aiaha.xyz
+cookie: x-default-title=AI%E9%A3%8E%E6%9C%88
+cookie: TawkConnectionTime=0
+cookie: twk_uuid_6701fe04256fb1049b1d9061=%7B%22uuid%22%3A%221.PUxMzSMW8P9xERazMc2nhFRJc8Rls1C5aYRyZIVlVVMRwnXAxXz6AXhPFUMxiBGi5iiJVfaR2a9pskxuiaRmkQch60LnBEPjm8bBsaf7Z5oOb1B5c%22%2C%22version%22%3A3%2C%22domain%22%3A%22aiaha.xyz%22%2C%22ts%22%3A1784247918701%7D
+cookie: _ga_SVXQZE4J8L=GS2.1.s1784247914$o2$g1$t1784247927$j47$l0$h0
+cookie: _ga_R7R0KXLSN6=GS2.1.s1784247914$o2$g1$t1784247927$j47$l0$h0
+priority: u=1, i

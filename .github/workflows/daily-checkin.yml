@@ -1,0 +1,26 @@
+name: fengyue daily check-in
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install dependencies
+        run: pip install requests
+
+      - name: run check-in
+        env:
+          FENGYUE_EMAIL: ${{ secrets.FENGYUE_EMAIL }}
+          FENGYUE_PASSWORD: ${{ secrets.FENGYUE_PASSWORD }}
+        run: python scripts/fengyue_checkin.py

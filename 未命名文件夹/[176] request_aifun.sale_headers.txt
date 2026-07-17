@@ -1,0 +1,16 @@
+host: aifun.sale
+sec-ch-ua-platform: "Windows"
+user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+accept: application/json
+sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"
+sec-ch-ua-mobile: ?0
+origin: https://aiaha.xyz
+sec-fetch-site: cross-site
+sec-fetch-mode: cors
+sec-fetch-dest: empty
+sec-fetch-storage-access: active
+referer: https://aiaha.xyz/
+accept-encoding: gzip, deflate, br, zstd
+accept-language: zh-CN,zh;q=0.9
+cookie: _cfuvid=vr0R1V29YZvcyRad8S_FRpqNxhHkYCA9HZyEGPmfGP0-1784247925.034227-1.0.1.1-4s1p2HQyGLtkj9JScaFUhdgUx3fI2EwH0BwNiPjvj6M
+priority: u=1, i

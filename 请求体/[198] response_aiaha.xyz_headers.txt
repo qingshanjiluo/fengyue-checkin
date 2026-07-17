@@ -1,0 +1,17 @@
+date: Fri, 17 Jul 2026 00:25:49 GMT
+content-type: text/x-component
+cache-control: private, no-cache, no-store, max-age=0, must-revalidate
+content-encoding: gzip
+set-cookie: locale=zh-Hans; Path=/; Expires=Sat, 17 Jul 2027 00:25:48 GMT; Max-Age=31536000; SameSite=lax
+set-cookie: x-domain=aiaha.xyz; Path=/
+set-cookie: x-hostname=aiaha.xyz; Path=/
+set-cookie: x-default-title=AI%E9%A3%8E%E6%9C%88; Path=/
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Accept-Encoding
+x-middleware-rewrite: /explore/apps?ranking=recommended&display=simple
+x-nextjs-rewritten-path: /explore/apps
+cf-cache-status: DYNAMIC
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=zBKE3PVWiLNvouXcua1SOqYsi2tbLoU8ivbsx3zLRYMZlQrUF8%2B2p58LS6a70o8wscMSEGck5ZRyJFtj17TTs2eKzHXevFE5UwmhsHjL4Y%2FVden3up%2BZclhVayyI29qnjzjGQYlz96o%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a1c51c908ff823de-LAX
+alt-svc: h3=":443"; ma=86400

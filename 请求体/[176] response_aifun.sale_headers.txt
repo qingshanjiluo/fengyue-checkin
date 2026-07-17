@@ -1,0 +1,17 @@
+date: Fri, 17 Jul 2026 00:25:46 GMT
+content-type: application/json;charset=UTF-8
+server: cloudflare
+x-request-id: whmlwam07ljttopzowbt
+x-content-type-options: nosniff
+x-xss-protection: 0
+cache-control: no-cache, no-store, max-age=0, must-revalidate
+pragma: no-cache
+expires: 0
+x-frame-options: DENY
+access-control-allow-origin: https://aiaha.xyz
+access-control-allow-credentials: true
+front-end-https: on
+content-encoding: gzip
+cf-cache-status: DYNAMIC
+vary: accept-encoding
+cf-ray: a1c51c826c2f5121-LAX

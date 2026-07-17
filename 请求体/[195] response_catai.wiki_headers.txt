@@ -1,0 +1,14 @@
+date: Fri, 17 Jul 2026 00:25:48 GMT
+cf-ray: a1c51c8e2974de63-LAX
+cf-cache-status: HIT
+access-control-allow-origin: *
+age: 997784
+cache-control: public,max-age=172800,stale-while-revalidate=7200
+etag: "cf4WNWRGp2DA0h4uh0U8vbiV4eXYxIchQuq-VXDUg5DQ"
+server: cloudflare
+vary: accept, accept-encoding
+cf-images: internal=ok/- q=0 n=93+137 c=0+0 v=2026.4.6 l=15893 f=false
+content-security-policy: default-src 'none'; navigate-to 'none'; form-action 'none'; img-src data:; style-src 'unsafe-inline';
+x-content-type-options: nosniff
+speculation-rules: "/cdn-cgi/speculation"
+alt-svc: h3=":443"; ma=86400
