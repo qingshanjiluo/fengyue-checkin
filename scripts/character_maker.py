@@ -316,9 +316,31 @@ class CharacterMaker:
         p = self.page
         p.wait_for_timeout(1000)
 
-    def step4_publish(self):
+    def step4_publish(self, anonymous=False):
         p = self.page
         p.wait_for_timeout(1000)
+
+        # Try anonymous toggle if requested
+        if anonymous:
+            try:
+                toggled = p.evaluate("""
+                    () => {
+                        const labels = document.querySelectorAll('label, span, div');
+                        for (const el of labels) {
+                            if ((el.innerText || '').includes('匿名') && el.offsetParent !== null) {
+                                const chk = el.closest('label')?.querySelector('input[type="checkbox"]');
+                                if (chk && !chk.checked) { chk.click(); return true; }
+                                if (!chk) { el.click(); return true; }
+                            }
+                        }
+                        return false;
+                    }
+                """)
+                if toggled:
+                    print("[OK] anonymous mode enabled")
+                    p.wait_for_timeout(500)
+            except:
+                pass
 
         # 点击发布
         clicked = p.evaluate("""
