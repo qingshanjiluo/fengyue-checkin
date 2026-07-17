@@ -28,7 +28,7 @@ let PYTHON = 'python';  // updated after user selects
 // 工具函数
 // ============================================================
 
-function q(s) { return s.includes(' ') ? `"${s}"` : s; }
+function shellQuote(s) { return s.includes(' ') ? `"${s}"` : s; }
 
 function findAllPython() {
   const seen = new Set();
@@ -53,7 +53,7 @@ function findAllPython() {
     try {
       const out = execSync(`"${cmd}" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
       const hasPip = execSync(`"${cmd}" -m pip --version 2>nul`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
-      found.push({ cmd: q(cmd), version: out, pip: !hasPip.includes('No module') });
+      found.push({ cmd, version: out, pip: !hasPip.includes('No module') });
     } catch {}
   }
   return found;
@@ -74,7 +74,7 @@ function runCapture(cmd) {
 
 function checkPkg(name) {
   try {
-    run(`${PYTHON} -c "import ${name}"`, { silent: true });
+    run(`${shellQuote(PYTHON)} -c "import ${name}"`, { silent: true });
     return true;
   } catch { return false; }
 }
@@ -135,7 +135,7 @@ async function checkEnvironment() {
 
   if (!selected.pip) {
     console.log('  ! 所选 Python 没有 pip，尝试安装...');
-    const out = runCapture(`${PYTHON} -m ensurepip --upgrade 2>&1`);
+    const out = runCapture(`${shellQuote(PYTHON)} -m ensurepip --upgrade 2>&1`);
     if (out.includes('Error') || out.includes('No module')) {
       console.log('  ✗ 无法自动安装 pip。试试选择另一个 Python，或手动安装:');
       console.log(`    ${out.slice(0, 200)}`);
@@ -157,10 +157,10 @@ async function checkEnvironment() {
     console.log(`  ! 缺少依赖: ${missing.join(', ')}`);
     const ans = await ask('  是否自动安装? (Y/n): ');
     if (ans.toLowerCase() !== 'n') {
-      run(`${PYTHON} -m pip install flask openai playwright pillow`);
+      run(`${shellQuote(PYTHON)} -m pip install flask openai playwright pillow`);
       // Install playwright browser
       try {
-        run(`${PYTHON} -m playwright install chromium`, { silent: true });
+        run(`${shellQuote(PYTHON)} -m playwright install chromium`, { silent: true });
         console.log('  ✓ Playwright Chromium 已安装');
       } catch { console.log('  ! Playwright 浏览器安装失败，可手动运行: python -m playwright install chromium'); }
     } else {
@@ -173,13 +173,13 @@ async function checkEnvironment() {
 
   // Playwright browser
   try {
-    run(`${PYTHON} -c "from playwright.sync_api import sync_playwright; sync_playwright().__enter__().chromium.launch(headless=True).close()"`, { silent: true });
+    run(`${shellQuote(PYTHON)} -c "from playwright.sync_api import sync_playwright; sync_playwright().__enter__().chromium.launch(headless=True).close()"`, { silent: true });
     console.log('  ✓ Playwright Chromium 可用');
   } catch {
     console.log('  ! Playwright Chromium 未安装');
     const ans = await ask('  是否安装? (Y/n): ');
     if (ans.toLowerCase() !== 'n') {
-      run(`${PYTHON} -m playwright install chromium`);
+      run(`${shellQuote(PYTHON)} -m playwright install chromium`);
     }
   }
 }
@@ -221,7 +221,7 @@ async function configure() {
     const fetchAns = await ask('  是否从上游获取模型列表? (Y/n): ');
     if (fetchAns.toLowerCase() !== 'n' && cfg.api_key && cfg.api_url) {
       try {
-        const out = runCapture(`${PYTHON} -c "
+        const out = runCapture(`${shellQuote(PYTHON)} -c "
 import urllib.request, json
 req = urllib.request.Request('${cfg.api_url.replace(/\/$/, '')}/models')
 req.add_header('Authorization', 'Bearer ${cfg.api_key.replace(/'/g, "\\'")}')
@@ -341,7 +341,7 @@ with open(cfg_path, 'w', encoding='utf-8') as f: json.dump(cfg, f, ensure_ascii=
 `;
       const tmpScript = path.join(require('os').tmpdir(), 'gen_imgs.py');
       fs.writeFileSync(tmpScript, script, 'utf-8');
-      run(`${PYTHON} "${tmpScript}"`);
+      run(`${shellQuote(PYTHON)} "${tmpScript}"`);
       try { fs.unlinkSync(tmpScript); } catch {}
       
       // Reload cfg
