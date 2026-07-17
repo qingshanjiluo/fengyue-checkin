@@ -216,10 +216,50 @@ async function configure() {
   }
   if (!cfg.api_url) cfg.api_url = 'https://api.openai.com/v1';
 
-  // Model
+  // Model - try to fetch from API
   if (!cfg.model) {
-    const model = await ask(`  模型名称 (默认 gpt-4o-mini): `);
-    if (model) cfg.model = model;
+    const fetchAns = await ask('  是否从上游获取模型列表? (Y/n): ');
+    if (fetchAns.toLowerCase() !== 'n' && cfg.api_key && cfg.api_url) {
+      try {
+        const out = runCapture(`${PYTHON} -c "
+import urllib.request, json
+req = urllib.request.Request('${cfg.api_url.replace(/\/$/, '')}/models')
+req.add_header('Authorization', 'Bearer ${cfg.api_key.replace(/'/g, "\\'")}')
+try:
+  with urllib.request.urlopen(req, timeout=10) as r:
+    data = json.loads(r.read())
+  models = [m['id'] for m in data.get('data', []) if m.get('id')]
+  models.sort()
+  if models:
+    print('MODELS:' + json.dumps(models))
+except Exception as e:
+  print('ERROR:' + str(e))
+"`);
+        if (out.includes('MODELS:')) {
+          const models = JSON.parse(out.split('MODELS:')[1].trim());
+          console.log(`  找到 ${models.length} 个模型:`);
+          models.forEach((m, i) => {
+            console.log(`    [${i}] ${m}`);
+          });
+          const selected = await ask(`  选择模型 (输入编号，逗号分隔多选，留空用默认): `);
+          if (selected.trim()) {
+            const indices = selected.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0 && n < models.length);
+            if (indices.length > 0) {
+              cfg.model = indices.map(i => models[i]).join(', ');
+              console.log(`  → 已选择: ${cfg.model}`);
+            }
+          }
+        } else if (out.includes('ERROR:')) {
+          console.log(`  ! 获取失败: ${out.split('ERROR:')[1].trim().slice(0, 100)}`);
+        }
+      } catch (e) {
+        console.log(`  ! 获取失败: ${e.message}`);
+      }
+    }
+    if (!cfg.model) {
+      const model = await ask(`  模型名称 (默认 gpt-4o-mini): `);
+      if (model) cfg.model = model;
+    }
   }
   if (!cfg.model) cfg.model = 'gpt-4o-mini';
 

@@ -27,6 +27,8 @@ tasks_lock = threading.Lock()
 hotlist_cache = {"data": None, "time": 0, "ranking": None}
 hotlist_cache_lock = threading.Lock()
 hotlist_browser = None
+hotlist_playwright = None
+hotlist_lock = threading.Lock()  # Serialize Playwright ops (not thread-safe)
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -97,6 +99,7 @@ def api_list_images():
             "mtime": stat.st_mtime,
             "url": f"/uploads/{fname}",
             "thumb": f"/uploads/{fname}",
+            "local_path": fpath,
         }
         # Try to read dimensions
         if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
@@ -141,12 +144,19 @@ def api_delete_image(name):
     return jsonify({"ok": False, "error": "Not found"}), 404
 
 def get_hotlist_browser():
-    global hotlist_browser
-    if hotlist_browser is None:
-        from playwright.sync_api import sync_playwright
-        p = sync_playwright().start()
-        hotlist_browser = p.chromium.launch(headless=True, slow_mo=100)
+    global hotlist_browser, hotlist_playwright
+    with hotlist_lock:
+        if hotlist_browser is None:
+            from playwright.sync_api import sync_playwright
+            hotlist_playwright = sync_playwright().start()
+            hotlist_browser = hotlist_playwright.chromium.launch(headless=True, slow_mo=100)
     return hotlist_browser
+
+def hotlist_new_page(browser):
+    """Create a fresh page in a new context (thread-safe, called under hotlist_lock)."""
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    page = ctx.new_page()
+    return page, ctx
 
 @app.route("/api/hotlist", methods=["GET"])
 def api_hotlist():
@@ -159,11 +169,10 @@ def api_hotlist():
 
     try:
         browser = get_hotlist_browser()
-        ctx = browser.contexts[0] if browser.contexts else browser.new_context(viewport={"width": 1280, "height": 900})
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        with hotlist_lock:
+            page, ctx = hotlist_new_page(browser)
 
-        # Ensure logged in
-        if "/zh/signin" in page.url or page.url == "about:blank":
+            # Ensure logged in
             settings = load_settings()
             page.goto(f"{BASE_URL}/zh/signin")
             page.wait_for_load_state("networkidle")
@@ -173,7 +182,9 @@ def api_hotlist():
             page.wait_for_load_state("networkidle")
             page.wait_for_timeout(2000)
 
-        cards = fetch_ranking(page, ranking)
+            cards = fetch_ranking(page, ranking)
+            ctx.close()
+
         if not cards:
             return jsonify({"ok": False, "error": "未提取到数据"}), 500
 

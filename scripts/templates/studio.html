@@ -596,6 +596,7 @@ async function loadImages() {
       grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#ef4444;font-size:13px;grid-column:1/-1">⚠️ 加载失败</div>';
       return;
     }
+    window._imgData = data.images;
     if (data.images.length === 0) {
       grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">暂无图片，点击上方上传</div>';
       return;
@@ -606,9 +607,9 @@ async function loadImages() {
         '<img src="' + img.thumb + '?t=' + Date.now() + '" loading="lazy">' +
         '<div class="name">' + escHtml(img.name) + (dims ? ' (' + dims + ')' : '') + '</div>' +
         '<div class="actions">' +
-          '<button class="use" onclick="event.stopPropagation();useImageAsCover(\'' + img.name.replace(/'/g,"\\'") + '\')">📺</button>' +
-          '<button class="use" onclick="event.stopPropagation();useImageAsBg(\'' + img.name.replace(/'/g,"\\'") + '\')">💬</button>' +
-          '<button class="use" onclick="event.stopPropagation();useImageAsMobile(\'' + img.name.replace(/'/g,"\\'") + '\')">📱</button>' +
+          '<button class="use" onclick="event.stopPropagation();setImgField(\'cover\',\'' + img.name.replace(/'/g,"\\'") + '\')">📺</button>' +
+          '<button class="use" onclick="event.stopPropagation();setImgField(\'chatbg\',\'' + img.name.replace(/'/g,"\\'") + '\')">💬</button>' +
+          '<button class="use" onclick="event.stopPropagation();setImgField(\'mobilebg\',\'' + img.name.replace(/'/g,"\\'") + '\')">📱</button>' +
           '<button class="del" onclick="event.stopPropagation();deleteImage(\'' + img.name.replace(/'/g,"\\'") + '\')">✕</button>' +
         '</div>' +
       '</div>';
@@ -618,57 +619,15 @@ async function loadImages() {
   }
 }
 
-async function uploadImages(files) {
-  if (!files || files.length === 0) return;
-  setStatus('上传中...', true);
-  for (const file of files) {
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-      const r = await fetch(BASE + 'api/images/upload', { method: 'POST', body: fd });
-      const data = await r.json();
-      if (data.ok) showToast('✅ 已上传: ' + data.name);
-      else showToast('⚠️ ' + (data.error || '上传失败'));
-    } catch(e) {
-      showToast('⚠️ 上传失败: ' + e.message);
-    }
-  }
-  setStatus('就绪', false);
-  document.getElementById('imgUpload').value = '';
-  loadImages();
-}
-
-async function deleteImage(name) {
-  if (!confirm('确定删除 ' + name + ' ？')) return;
-  try {
-    const r = await fetch(BASE + 'api/images/' + encodeURIComponent(name), { method: 'DELETE' });
-    const data = await r.json();
-    if (data.ok) { showToast('已删除'); loadImages(); }
-    else showToast('⚠️ ' + (data.error || '删除失败'));
-  } catch(e) {
-    showToast('⚠️ ' + e.message);
-  }
-}
-
-function useImageAsCover(name) {
-  const fullPath = document.getElementById('s-cover');
-  fullPath.value = 'G:\\皮皮\\编程项目\\fengyue\\generated_imgs\\' + name;
+function setImgField(field, name) {
+  const imgs = window._imgData || [];
+  const img = imgs.find(i => i.name === name);
+  if (!img || !img.local_path) return;
+  const fieldMap = {cover:'s-cover', chatbg:'s-chatbg', mobilebg:'s-mobilebg'};
+  const el = document.getElementById(fieldMap[field]);
+  if (el) el.value = img.local_path;
   switchPanel('settings');
-  showToast('✅ 已设为封面: ' + name);
-}
-
-function useImageAsBg(name) {
-  const fullPath = document.getElementById('s-chatbg');
-  fullPath.value = 'G:\\皮皮\\编程项目\\fengyue\\generated_imgs\\' + name;
-  switchPanel('settings');
-  showToast('✅ 已设聊天背景: ' + name);
-}
-
-function useImageAsMobile(name) {
-  const fullPath = document.getElementById('s-mobilebg');
-  fullPath.value = 'G:\\皮皮\\编程项目\\fengyue\\generated_imgs\\' + name;
-  switchPanel('settings');
-  showToast('✅ 已设移动背景: ' + name);
+  showToast('✅ 已设为' + ({cover:'封面',chatbg:'聊天背景',mobilebg:'移动背景'})[field] + ': ' + name);
 }
 
 // Override switchPanel to load images when switching to image tab
