@@ -16,6 +16,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
 .nav-actions{margin-left:auto;display:flex;gap:8px}
 .nav-actions button{padding:6px 14px;font-size:12px;border-radius:6px;border:1px solid #3a3a5a;background:#1a1a2e;color:#ccc;cursor:pointer}
 .nav-actions button:hover{background:#2a2a4a}
+.nav-actions button.active{background:#7c3aed;border-color:#7c3aed;color:#fff}
 .container{display:flex;flex:1;overflow:hidden}
 .sidebar{width:340px;min-width:340px;background:#16162a;border-right:1px solid #2a2a4a;display:flex;flex-direction:column}
 .chat-area{flex:1;display:flex;flex-direction:column;background:#0f0f1a}
@@ -57,6 +58,28 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
 .progress .step.active{color:#eab308}
 .progress .step.error{color:#ef4444}
 .step-icon{width:16px;text-align:center}
+.sidebar-tabs{display:flex;border-bottom:1px solid #2a2a4a}
+.sidebar-tabs .stab{flex:1;padding:10px;font-size:12px;border:none;background:#16162a;color:#888;cursor:pointer;border-bottom:2px solid transparent}
+.sidebar-tabs .stab.active{color:#a78bfa;border-bottom-color:#7c3aed;background:#1a1a2e}
+.sidebar-tabs .stab:hover{color:#ccc}
+.hotlist-panel{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.hotlist-header{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid #2a2a4a;align-items:center}
+.hotlist-header select{flex:1;padding:5px 8px;background:#0f0f1a;border:1px solid #3a3a5a;border-radius:4px;color:#e0e0e0;font-size:12px;outline:none}
+.hl-items{flex:1;overflow-y:auto;padding:8px}
+.hl-loading{text-align:center;padding:40px 0;color:#666;font-size:13px}
+.hl-card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;transition:border-color .2s}
+.hl-card:hover{border-color:#7c3aed}
+.hl-card .hl-title{font-size:13px;font-weight:600;color:#e0e0e0;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hl-card .hl-meta{font-size:11px;color:#94a3b8;display:flex;gap:10px;flex-wrap:wrap}
+.hl-card .hl-meta span{background:#0f0f1a;padding:1px 6px;border-radius:3px}
+.hl-card .hl-tags{font-size:10px;color:#666;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hl-card .hl-desc{font-size:11px;color:#666;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hl-card .hl-actions{display:flex;gap:6px;margin-top:6px}
+.hl-card .hl-actions button{flex:1;padding:4px;font-size:11px;border-radius:4px;border:none;cursor:pointer}
+.hl-card .hl-use{background:#7c3aed;color:#fff}
+.hl-card .hl-use:hover{background:#6d28d9}
+.hl-card .hl-preview{background:#2a2a4a;color:#ccc}
+.hl-card .hl-preview:hover{background:#3a3a5a}
 @media(max-width:768px){.sidebar{width:100%;min-width:100%;display:none}.sidebar.open{display:flex;position:fixed;top:0;left:0;bottom:0;z-index:100}.container{flex-direction:column}}
 </style>
 </head>
@@ -65,6 +88,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
   <h1>✦ 角色卡工作室</h1>
   <span class="badge">AI 驱动</span>
   <div class="nav-actions">
+    <button id="btnHotlist" onclick="toggleHotlist()">🔥 热榜</button>
     <button onclick="toggleSidebar()">⚙ 设置</button>
     <button onclick="clearChat()">🗑 清空</button>
   </div>
@@ -72,7 +96,11 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
 
 <div class="container">
   <div class="sidebar" id="sidebar">
-    <div class="settings-panel">
+    <div class="sidebar-tabs">
+      <button class="stab active" data-panel="settings" onclick="switchPanel('settings')">⚙ 设置</button>
+      <button class="stab" data-panel="hotlist" onclick="switchPanel('hotlist')">🔥 热榜</button>
+    </div>
+    <div class="settings-panel" id="panel-settings">
       <h3>🔌 OpenAI 兼容接口</h3>
       <div class="settings-group">
         <div class="field">
@@ -120,6 +148,22 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
       </div>
 
       <button class="btn-save" onclick="saveSettings()">💾 保存设置</button>
+    </div>
+    <div class="hotlist-panel" id="panel-hotlist" style="display:none">
+      <div class="hotlist-header">
+        <select id="hl-ranking" onchange="loadHotlist()">
+          <option value="weekly">周榜</option>
+          <option value="daily">日榜</option>
+          <option value="monthly">月榜</option>
+          <option value="total">总榜</option>
+          <option value="recommended">推荐</option>
+          <option value="latest">最近发布</option>
+        </select>
+        <button onclick="loadHotlist()" style="padding:4px 10px;font-size:12px;border-radius:4px;border:1px solid #3a3a5a;background:#1a1a2e;color:#ccc;cursor:pointer">🔄 刷新</button>
+      </div>
+      <div class="hl-items" id="hlItems">
+        <div class="hl-loading">加载中...</div>
+      </div>
     </div>
   </div>
 
@@ -225,6 +269,123 @@ function showProgress(steps, current) {
 function removeProgress() {
   const el = document.getElementById('progressMsg');
   if (el) el.remove();
+}
+
+let currentPanel = 'settings';
+
+function switchPanel(name) {
+  currentPanel = name;
+  document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.panel === name));
+  document.getElementById('panel-settings').style.display = name === 'settings' ? '' : 'none';
+  document.getElementById('panel-hotlist').style.display = name === 'hotlist' ? '' : 'none';
+  if (name === 'hotlist') loadHotlist();
+}
+
+function toggleHotlist() {
+  const btn = document.getElementById('btnHotlist');
+  if (currentPanel === 'hotlist') {
+    switchPanel('settings');
+    btn.classList.remove('active');
+  } else {
+    switchPanel('hotlist');
+    btn.classList.add('active');
+  }
+}
+
+async function loadHotlist() {
+  const ranking = document.getElementById('hl-ranking').value;
+  const container = document.getElementById('hlItems');
+  container.innerHTML = '<div class="hl-loading">⏳ 加载热榜...</div>';
+
+  try {
+    const r = await fetch(BASE + 'api/hotlist?ranking=' + ranking + '&refresh=1');
+    const data = await r.json();
+    if (!data.ok || !data.items) {
+      container.innerHTML = '<div class="hl-loading">⚠️ ' + (data.error || '加载失败') + '</div>';
+      return;
+    }
+    renderHotlist(data.items);
+  } catch(e) {
+    container.innerHTML = '<div class="hl-loading">⚠️ 请求失败: ' + e.message + '</div>';
+  }
+}
+
+function renderHotlist(items) {
+  const container = document.getElementById('hlItems');
+  if (!items || items.length === 0) {
+    container.innerHTML = '<div class="hl-loading">暂无数据</div>';
+    return;
+  }
+  container.innerHTML = items.map((item, i) =>
+    '<div class="hl-card">' +
+      '<div class="hl-title">' + (i+1) + '. ' + escHtml(item.title) + '</div>' +
+      '<div class="hl-meta">' +
+        '<span>🔥 ' + item.playCount + '</span>' +
+        '<span>⭐ ' + item.rating + '</span>' +
+        (item.author ? '<span>👤 ' + escHtml(item.author) + '</span>' : '') +
+      '</div>' +
+      (item.tags ? '<div class="hl-tags">🏷 ' + escHtml(item.tags) + '</div>' : '') +
+      (item.description ? '<div class="hl-desc">' + escHtml(item.description.slice(0, 150)) + '</div>' : '') +
+      '<div class="hl-actions">' +
+        '<button class="hl-use" onclick="useHotlistItem(' + i + ')">📝 参考创作</button>' +
+        '<button class="hl-use" onclick="quickCreate(' + i + ')" style="background:#0891b2">⚡ 一键创作</button>' +
+        '<button class="hl-preview" onclick="window.open(\'' + item.url + '\',\'_blank\')">👁 预览</button>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+  window._hlItems = items;
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function quickCreate(index) {
+  const items = window._hlItems || [];
+  const item = items[index];
+  if (!item) return;
+
+  const prompt = `请参考这个热门作品，创作一个风格类似的全新角色卡：
+
+参考作品: ${item.title}
+热度: ${item.playCount}
+标签: ${item.tags}
+简介: ${item.description}
+
+要求：
+1. 创作一个全新的原创角色卡，不要复制原作品
+2. 保持类似的风格、题材和用户群体
+3. 角色设定要完整（姓名、职业、年龄、性别、外貌、性格、语气、背景）
+4. 作品名要有吸引力`;
+
+  document.getElementById('chatInput').value = prompt;
+  switchPanel('settings');
+  document.getElementById('btnHotlist').classList.remove('active');
+  setTimeout(() => sendMsg(), 500);
+}
+
+function useHotlistItem(index) {
+  const items = window._hlItems || [];
+  const item = items[index];
+  if (!item) return;
+
+  // Build a prompt for AI referencing this hot work
+  const prompt = `请参考这个热门作品的风格和设定，帮我创作一个类似的角色卡：
+
+参考作品: ${item.title}
+热度: ${item.playCount}
+标签: ${item.tags}
+简介: ${item.description}
+
+请创作一个类似风格的全新角色卡，包括完整的角色设定。`;
+
+  // Inject into chat
+  document.getElementById('chatInput').value = prompt;
+  document.getElementById('chatInput').focus();
+  switchPanel('settings');
+  document.getElementById('btnHotlist').classList.remove('active');
+  showToast('已填入参考 prompt，点击发送即可');
 }
 
 function showToast(msg) {

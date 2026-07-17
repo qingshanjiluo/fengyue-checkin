@@ -12,6 +12,7 @@ from flask import Flask, request, jsonify, render_template, url_for
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from character_maker import CharacterMaker, BASE_URL
+from hotlist_scraper import fetch_ranking, extract_cards, format_for_ai, RANKINGS
 
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(__file__), "templates"))
@@ -19,6 +20,9 @@ app = Flask(__name__,
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "studio_settings.json")
 tasks = {}
 tasks_lock = threading.Lock()
+hotlist_cache = {"data": None, "time": 0, "ranking": None}
+hotlist_cache_lock = threading.Lock()
+hotlist_browser = None
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -43,6 +47,56 @@ def api_save_settings():
     data = request.get_json() or {}
     save_settings(data)
     return jsonify({"ok": True})
+
+def get_hotlist_browser():
+    global hotlist_browser
+    if hotlist_browser is None:
+        from playwright.sync_api import sync_playwright
+        p = sync_playwright().start()
+        hotlist_browser = p.chromium.launch(headless=True, slow_mo=100)
+    return hotlist_browser
+
+@app.route("/api/hotlist", methods=["GET"])
+def api_hotlist():
+    ranking = request.args.get("ranking", "weekly")
+    refresh = request.args.get("refresh", "0") == "1"
+
+    with hotlist_cache_lock:
+        if not refresh and hotlist_cache["data"] and hotlist_cache["ranking"] == ranking and (time.time() - hotlist_cache["time"]) < 120:
+            return jsonify({"ok": True, "ranking": ranking, "items": hotlist_cache["data"], "cached": True})
+
+    try:
+        browser = get_hotlist_browser()
+        ctx = browser.contexts[0] if browser.contexts else browser.new_context(viewport={"width": 1280, "height": 900})
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+
+        # Ensure logged in
+        if "/zh/signin" in page.url or page.url == "about:blank":
+            settings = load_settings()
+            page.goto(f"{BASE_URL}/zh/signin")
+            page.wait_for_load_state("networkidle")
+            page.locator('input[type="email"]').first.fill(settings.get("email", ""))
+            page.locator('input[type="password"]').first.fill(settings.get("password", ""))
+            page.keyboard.press("Enter")
+            page.wait_for_load_state("networkidle")
+            page.wait_for_timeout(2000)
+
+        cards = fetch_ranking(page, ranking)
+        if not cards:
+            return jsonify({"ok": False, "error": "未提取到数据"}), 500
+
+        with hotlist_cache_lock:
+            hotlist_cache["data"] = cards
+            hotlist_cache["time"] = time.time()
+            hotlist_cache["ranking"] = ranking
+
+        return jsonify({"ok": True, "ranking": ranking, "items": cards, "cached": False})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/hotlist/rankings", methods=["GET"])
+def api_hotlist_rankings():
+    return jsonify(RANKINGS)
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
