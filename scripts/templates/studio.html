@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>风月AI 角色卡工作室</title>
+<script>
+const BASE = "/";
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e0e0e0;height:100vh;display:flex;flex-direction:column}
+.nav{background:#1a1a2e;padding:12px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a2a4a}
+.nav h1{font-size:18px;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.nav .badge{font-size:11px;background:#2a2a4a;color:#888;padding:2px 8px;border-radius:4px;-webkit-text-fill-color:#888}
+.nav-actions{margin-left:auto;display:flex;gap:8px}
+.nav-actions button{padding:6px 14px;font-size:12px;border-radius:6px;border:1px solid #3a3a5a;background:#1a1a2e;color:#ccc;cursor:pointer}
+.nav-actions button:hover{background:#2a2a4a}
+.container{display:flex;flex:1;overflow:hidden}
+.sidebar{width:340px;min-width:340px;background:#16162a;border-right:1px solid #2a2a4a;display:flex;flex-direction:column}
+.chat-area{flex:1;display:flex;flex-direction:column;background:#0f0f1a}
+.msgs{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.msg{max-width:80%;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.6;animation:fadeIn .3s}
+.msg.user{background:#2e1065;align-self:flex-end;border-bottom-right-radius:4px}
+.msg.assistant{background:#1a1a2e;align-self:flex-start;border-bottom-left-radius:4px}
+.msg.system{background:#1e293b;align-self:center;font-size:12px;color:#94a3b8;border:1px solid #334155}
+.msg .time{font-size:11px;color:#666;margin-top:4px}
+.input-area{border-top:1px solid #2a2a4a;padding:12px 20px;display:flex;gap:10px;align-items:flex-end}
+.input-area textarea{flex:1;background:#1a1a2e;border:1px solid #3a3a5a;border-radius:10px;padding:10px 14px;color:#e0e0e0;font-size:14px;resize:none;min-height:44px;max-height:120px;outline:none}
+.input-area textarea:focus{border-color:#7c3aed}
+.input-area button{width:44px;height:44px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.input-area button:disabled{background:#3a3a5a;cursor:not-allowed}
+.input-area button:hover:not(:disabled){background:#6d28d9}
+.settings-panel{overflow-y:auto;padding:16px}
+.settings-panel h3{font-size:13px;color:#a78bfa;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+.settings-panel h3:first-child{margin-top:0}
+.settings-group{display:flex;flex-direction:column;gap:10px}
+.field label{font-size:12px;color:#94a3b8;display:block;margin-bottom:3px}
+.field input,.field select{width:100%;padding:8px 10px;background:#0f0f1a;border:1px solid #3a3a5a;border-radius:6px;color:#e0e0e0;font-size:13px;outline:none}
+.field input:focus{border-color:#7c3aed}
+.field .hint{font-size:11px;color:#666;margin-top:2px}
+.btn-save{width:100%;padding:10px;margin-top:16px;background:#7c3aed;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer}
+.btn-save:hover{background:#6d28d9}
+.status-bar{height:32px;background:#1a1a2e;border-top:1px solid #2a2a4a;display:flex;align-items:center;padding:0 16px;font-size:12px;color:#94a3b8;gap:8px}
+.status-bar .dot{width:8px;height:8px;border-radius:50%;background:#22c55e}
+.status-bar .dot.busy{background:#eab308;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.typing{display:flex;gap:4px;padding:4px 0}
+.typing span{width:6px;height:6px;background:#7c3aed;border-radius:50%;animation:bounce 1.4s infinite}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+.progress{background:#1a1a2e;border-radius:8px;padding:8px 12px;font-size:12px;color:#94a3b8;margin-top:4px;border:1px solid #2a2a4a}
+.progress .step{display:flex;align-items:center;gap:6px;padding:2px 0}
+.progress .step.done{color:#22c55e}
+.progress .step.active{color:#eab308}
+.progress .step.error{color:#ef4444}
+.step-icon{width:16px;text-align:center}
+@media(max-width:768px){.sidebar{width:100%;min-width:100%;display:none}.sidebar.open{display:flex;position:fixed;top:0;left:0;bottom:0;z-index:100}.container{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="nav">
+  <h1>✦ 角色卡工作室</h1>
+  <span class="badge">AI 驱动</span>
+  <div class="nav-actions">
+    <button onclick="toggleSidebar()">⚙ 设置</button>
+    <button onclick="clearChat()">🗑 清空</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="sidebar" id="sidebar">
+    <div class="settings-panel">
+      <h3>🔌 OpenAI 兼容接口</h3>
+      <div class="settings-group">
+        <div class="field">
+          <label>接口地址</label>
+          <input id="s-api-url" placeholder="https://api.openai.com/v1">
+          <div class="hint">支持 OpenAI / vLLM / Ollama 等兼容接口</div>
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input id="s-api-key" type="password" placeholder="sk-...">
+        </div>
+        <div class="field">
+          <label>模型名称</label>
+          <input id="s-model" placeholder="gpt-4o-mini">
+          <div class="hint">如 gpt-4o, deepseek-chat, qwen-max 等</div>
+        </div>
+      </div>
+
+      <h3>👤 风月账号</h3>
+      <div class="settings-group">
+        <div class="field">
+          <label>邮箱</label>
+          <input id="s-email" placeholder="your@email.com">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input id="s-password" type="password" placeholder="********">
+        </div>
+      </div>
+
+      <h3>🎭 默认角色形象</h3>
+      <div class="settings-group">
+        <div class="field">
+          <label>封面图路径</label>
+          <input id="s-cover" placeholder="D:\images\cover.png">
+        </div>
+        <div class="field">
+          <label>聊天背景图路径</label>
+          <input id="s-chatbg" placeholder="D:\images\chat_bg.png">
+        </div>
+        <div class="field">
+          <label>移动端背景图路径</label>
+          <input id="s-mobilebg" placeholder="D:\images\mobile_bg.png">
+        </div>
+      </div>
+
+      <button class="btn-save" onclick="saveSettings()">💾 保存设置</button>
+    </div>
+  </div>
+
+  <div class="chat-area">
+    <div class="msgs" id="msgArea">
+      <div class="msg assistant">
+        你好！我是角色卡制作助手。请告诉我你想要创建什么样的角色卡，我会自动帮你完成全部制作流程。
+        <div class="time">随时开始</div>
+      </div>
+    </div>
+    <div class="input-area">
+      <textarea id="chatInput" rows="1" placeholder="描述你想要的角色卡..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"></textarea>
+      <button id="sendBtn" onclick="sendMsg()">➤</button>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span class="dot" id="statusDot"></span>
+  <span id="statusText">就绪</span>
+</div>
+
+<script>
+let settings = {};
+let taskId = null;
+let eventSource = null;
+
+async function loadSettings() {
+  try {
+    const r = await fetch(BASE + 'api/settings');
+    settings = await r.json();
+    document.getElementById('s-api-url').value = settings.api_url || '';
+    document.getElementById('s-api-key').value = settings.api_key || '';
+    document.getElementById('s-model').value = settings.model || '';
+    document.getElementById('s-email').value = settings.email || '';
+    document.getElementById('s-password').value = settings.password || '';
+    document.getElementById('s-cover').value = settings.cover || '';
+    document.getElementById('s-chatbg').value = settings.chat_bg || '';
+    document.getElementById('s-mobilebg').value = settings.mobile_bg || '';
+  } catch(e) { console.log('no saved settings'); }
+}
+
+async function saveSettings() {
+  const s = {
+    api_url: document.getElementById('s-api-url').value,
+    api_key: document.getElementById('s-api-key').value,
+    model: document.getElementById('s-model').value,
+    email: document.getElementById('s-email').value,
+    password: document.getElementById('s-password').value,
+    cover: document.getElementById('s-cover').value,
+    chat_bg: document.getElementById('s-chatbg').value,
+    mobile_bg: document.getElementById('s-mobilebg').value,
+  };
+  await fetch(BASE + 'api/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(s),
+  });
+  settings = s;
+  showToast('设置已保存');
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function clearChat() {
+  const area = document.getElementById('msgArea');
+  area.innerHTML = '<div class="msg assistant">对话已清空。请描述你想要创建的角色卡。<div class="time">刚刚</div></div>';
+}
+
+function addMsg(role, text, extra) {
+  const area = document.getElementById('msgArea');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = text + '<div class="time">' + (extra || new Date().toLocaleTimeString()) + '</div>';
+  if (role === 'assistant' && extra === 'progress') {
+    div.id = 'progressMsg';
+  }
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  return div;
+}
+
+function showProgress(steps, current) {
+  let html = '<div class="progress">';
+  for (let i = 0; i < steps.length; i++) {
+    const cls = i < current ? 'done' : i === current ? 'active' : '';
+    const icon = i < current ? '✓' : i === current ? '◌' : '○';
+    html += '<div class="step ' + cls + '"><span class="step-icon">' + icon + '</span> ' + steps[i] + '</div>';
+  }
+  html += '</div>';
+  let el = document.getElementById('progressMsg');
+  if (!el) {
+    el = addMsg('assistant', html, '');
+    el.id = 'progressMsg';
+  } else {
+    el.innerHTML = html;
+  }
+  document.getElementById('msgArea').scrollTop = document.getElementById('msgArea').scrollHeight;
+}
+
+function removeProgress() {
+  const el = document.getElementById('progressMsg');
+  if (el) el.remove();
+}
+
+function showToast(msg) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#1a1a2e;border:1px solid #7c3aed;padding:8px 20px;border-radius:8px;font-size:13px;z-index:999;animation:fadeIn .3s';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+
+function setStatus(text, busy) {
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('statusDot').className = 'dot' + (busy ? ' busy' : '');
+}
+
+async function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Check settings
+  if (!settings.api_key || !settings.email) {
+    addMsg('system', '⚠️ 请先在右侧设置面板中配置 OpenAI API Key 和风月账号信息');
+    return;
+  }
+
+  input.value = '';
+  document.getElementById('sendBtn').disabled = true;
+  setStatus('AI 思考中...', true);
+
+  addMsg('user', text.replace(/\n/g, '<br>'));
+
+  try {
+    const r = await fetch(BASE + 'api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await r.json();
+
+    if (data.error) {
+      addMsg('system', '⚠️ ' + data.error);
+      setStatus('就绪', false);
+      document.getElementById('sendBtn').disabled = false;
+      return;
+    }
+
+    // Show the AI's plan
+    addMsg('assistant', data.plan.replace(/\n/g, '<br>'));
+
+    if (data.task_id) {
+      taskId = data.task_id;
+      const steps = data.steps || ['AI 分析需求', '生成角色设定', '登录风月平台', '填写基础信息', '添加角色', '发布角色卡'];
+      showProgress(steps, -1);
+      
+      // Poll for progress
+      pollProgress(taskId, steps);
+    } else {
+      setStatus('就绪', false);
+      document.getElementById('sendBtn').disabled = false;
+    }
+  } catch(e) {
+    addMsg('system', '⚠️ 请求失败: ' + e.message);
+    setStatus('就绪', false);
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+
+async function pollProgress(tid, steps) {
+  try {
+    const r = await fetch(BASE + 'api/task/' + tid);
+    const data = await r.json();
+    
+    showProgress(steps, data.current_step);
+    setStatus(data.status_text || '执行中...', true);
+
+    if (data.log) {
+      let existing = document.getElementById('logMsg');
+      if (!existing) {
+        existing = addMsg('system', '<pre style="margin:0;font-size:11px;color:#94a3b8;white-space:pre-wrap">' + (data.log || '') + '</pre>');
+        existing.id = 'logMsg';
+      } else {
+        existing.querySelector('pre').textContent = data.log || '';
+      }
+    }
+
+    if (data.done) {
+      setStatus('完成', false);
+      document.getElementById('sendBtn').disabled = false;
+      removeProgress();
+      if (data.result) {
+        addMsg('assistant', '✅ 角色卡已成功创建！<br>' + (data.result.url ? '🔗 <a href="' + data.result.url + '" target="_blank" style="color:#a78bfa">查看角色卡</a>' : ''));
+      }
+      return;
+    }
+
+    if (data.error) {
+      setStatus('错误', false);
+      document.getElementById('sendBtn').disabled = false;
+      removeProgress();
+      addMsg('system', '⚠️ ' + data.error);
+      return;
+    }
+
+    setTimeout(() => pollProgress(tid, steps), 1000);
+  } catch(e) {
+    setTimeout(() => pollProgress(tid, steps), 2000);
+  }
+}
+
+loadSettings();
+</script>
+</body>
+</html>

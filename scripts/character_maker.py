@@ -140,27 +140,175 @@ class CharacterMaker:
             print(f"[!] next step failed: {e}")
             raise
 
-    def step2_character(self, prompt="", greeting=""):
-        p = self.page
-        if prompt:
-            try:
-                editors = p.locator('[contenteditable="true"]')
-                if editors.count() > 0:
-                    editors.first.fill(prompt)
-                    print(f"[OK] prompt ({len(prompt)} chars)")
-            except Exception:
-                try:
-                    p.locator("textarea").first.fill(prompt)
-                    print(f"[OK] prompt via textarea")
-                except Exception:
-                    print("[!] prompt field not found")
+    def _scroll_to_text(self, text):
+        self.page.evaluate("""
+            ([t]) => {
+                const all = document.querySelectorAll('*');
+                for (const el of all) {
+                    if (el.innerText && el.innerText.includes(t) && el.tagName === 'P') {
+                        el.scrollIntoView({block: 'center'}); return;
+                    }
+                }
+            }
+        """, [text])
+        self.page.wait_for_timeout(500)
 
-        if greeting:
+    def _js_fill_input(self, index, value):
+        return self.page.evaluate("""
+            ({idx, val}) => {
+                const all = document.querySelectorAll('*');
+                let d = null;
+                for (const el of all) {
+                    const slot = el.getAttribute('data-slot');
+                    if ((slot === 'dialog-content' || el.getAttribute('role') === 'dialog') && el.offsetParent !== null) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 100) { d = el; break; }
+                    }
+                }
+                if (!d) return false;
+                const inputs = d.querySelectorAll('input:not([type="file"]):not([type="hidden"])');
+                if (inputs[idx]) {
+                    const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    s.call(inputs[idx], val);
+                    inputs[idx].dispatchEvent(new Event('input', {bubbles: true}));
+                    return true;
+                }
+                return false;
+            }
+        """, {"idx": index, "val": value})
+
+    def _js_fill_textarea(self, index, value):
+        return self.page.evaluate("""
+            ({idx, val}) => {
+                const all = document.querySelectorAll('*');
+                let d = null;
+                for (const el of all) {
+                    const slot = el.getAttribute('data-slot');
+                    if ((slot === 'dialog-content' || el.getAttribute('role') === 'dialog') && el.offsetParent !== null) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 100) { d = el; break; }
+                    }
+                }
+                if (!d) return false;
+                const tas = d.querySelectorAll('textarea');
+                if (tas[idx]) {
+                    const s = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                    s.call(tas[idx], val);
+                    tas[idx].dispatchEvent(new Event('input', {bubbles: true}));
+                    return true;
+                }
+                return false;
+            }
+        """, {"idx": index, "val": value})
+
+    def _js_click_dialog_btn(self, btn_text):
+        return self.page.evaluate("""
+            ([text]) => {
+                const all = document.querySelectorAll('*');
+                let d = null;
+                for (const el of all) {
+                    const slot = el.getAttribute('data-slot');
+                    if ((slot === 'dialog-content' || el.getAttribute('role') === 'dialog') && el.offsetParent !== null) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 100) { d = el; break; }
+                    }
+                }
+                if (!d) return false;
+                const btns = d.querySelectorAll('button');
+                for (const btn of btns) {
+                    if ((btn.innerText || '').trim() === text && btn.offsetParent !== null) {
+                        btn.click(); return true;
+                    }
+                }
+                return false;
+            }
+        """, [btn_text])
+
+    def step2_add_character(self, name="小风", occupation="", age="18", gender="女",
+                            appearance="", personality="", tone="", background=""):
+        """点击 + 卡片打开弹窗，填入角色信息"""
+        p = self.page
+
+        # 滚动到角色设定区
+        self._scroll_to_text("角色设定")
+
+        # 点击 + 卡片
+        clicked = p.evaluate("""
+            () => {
+                const all = document.querySelectorAll('*');
+                for (const el of all) {
+                    const w = el.getBoundingClientRect().width;
+                    const h = el.getBoundingClientRect().height;
+                    if (Math.abs(w - 200) < 5 && Math.abs(h - 150) < 5 && el.offsetParent !== null) {
+                        el.click(); return true;
+                    }
+                }
+                return false;
+            }
+        """)
+        if not clicked:
+            print("[!] add character card not found")
+            return False
+        p.wait_for_timeout(1500)
+
+        # 检查弹窗
+        has_dialog = p.evaluate("""
+            () => {
+                const all = document.querySelectorAll('*');
+                for (const el of all) {
+                    const slot = el.getAttribute('data-slot');
+                    if (slot === 'dialog-content' && el.offsetParent !== null) return true;
+                }
+                return false;
+            }
+        """)
+        if not has_dialog:
+            print("[!] dialog did not open")
+            return False
+
+        # 填字段 (都带 * 必填)
+        self._js_fill_input(0, name or "小风")
+        self._js_fill_input(1, occupation or "AI精灵")
+        self._js_fill_input(2, age or "18")
+        self._js_fill_input(3, gender or "女")
+
+        self._js_fill_textarea(0, appearance or "来自数字世界的AI精灵，拥有治愈人心的力量")
+        self._js_fill_textarea(1, appearance or "身高165cm，银色长发及腰，浅蓝色眼眸，身穿白色长袍")
+        self._js_fill_textarea(2, personality or "温柔善良、耐心细致、乐观开朗")
+        self._js_fill_textarea(3, tone or "语气温柔，说话轻声细语")
+        self._js_fill_textarea(4, background or "诞生于数字世界的AI精灵，穿越到人类世界")
+
+        # 点击确认
+        ok = self._js_click_dialog_btn("确认")
+        p.wait_for_timeout(2000)
+        print(f"[OK] add character: {name}" if ok else "[!] confirm btn not found")
+        return ok
+
+    def step2_fill_protagonist(self, name="", setting="", goal=""):
+        """填主人公（玩家）设定"""
+        p = self.page
+        self._scroll_to_text("主人公（玩家）设定")
+
+        # 主人公名称 (input, placeholder="玩家（您）扮演的角色")
+        for sel, val in [
+            ('input[placeholder*="玩家（您）扮演的角色"]', name or "玩家"),
+            ('input[placeholder*="故事开展的世界"]', ""),
+        ]:
             try:
-                editors = p.locator('[contenteditable="true"]')
-                if editors.count() > 1:
-                    editors.nth(1).fill(greeting)
-                    print(f"[OK] greeting")
+                if val:
+                    p.locator(sel).first.fill(val)
+            except Exception:
+                pass
+
+        # 主人公设定 (textarea)
+        if setting:
+            try:
+                p.locator("textarea").nth(1).fill(setting)
+            except Exception:
+                pass
+        if goal:
+            try:
+                p.locator("textarea").nth(2).fill(goal)
             except Exception:
                 pass
 
@@ -171,18 +319,46 @@ class CharacterMaker:
     def step4_publish(self):
         p = self.page
         p.wait_for_timeout(1000)
-        try:
-            p.locator("button:has-text('发布')").first.click(force=True, timeout=10000)
-            p.wait_for_timeout(3000)
-            p.wait_for_load_state("networkidle")
-            print(f"[OK] published: {p.url}")
-        except Exception:
-            try:
-                p.locator("button:has-text('保存')").first.click(force=True, timeout=10000)
-                p.wait_for_timeout(2000)
-                print(f"[OK] saved")
-            except Exception as e:
-                print(f"[!] save failed: {e}")
+
+        # 点击发布
+        clicked = p.evaluate("""
+            () => {
+                const btns = document.querySelectorAll('button');
+                for (const btn of btns) {
+                    if (btn.innerText.trim() === '发布' && btn.offsetParent !== null) {
+                        btn.click(); return true;
+                    }
+                }
+                return false;
+            }
+        """)
+        if not clicked:
+            print("[!] 发布 button not found")
+            return False
+        print("[OK] clicked 发布")
+        p.wait_for_timeout(2000)
+
+        # 点击确认弹窗
+        confirmed = p.evaluate("""
+            () => {
+                const all = document.querySelectorAll('*');
+                for (const el of all) {
+                    if (el.offsetParent === null) continue;
+                    const t = (el.innerText || '').trim();
+                    if (el.tagName === 'BUTTON' && (t === '确认' || t === '确定') && el.offsetParent !== null) {
+                        el.click(); return true;
+                    }
+                }
+                return false;
+            }
+        """)
+        if confirmed:
+            print("[OK] confirmed publish")
+        else:
+            print("[!] no confirm dialog")
+        p.wait_for_timeout(3000)
+
+        return True
 
     def screenshot(self, path):
         self.page.screenshot(path=path)
@@ -200,11 +376,13 @@ def main():
     parser.add_argument("--password", help="登录密码")
     parser.add_argument("--headless", action="store_true", help="无头模式")
     parser.add_argument("--slow", type=int, default=300, help="操作延迟(ms)")
-    parser.add_argument("--name", default="", help="角色名称")
+    parser.add_argument("--name", default="", help="角色名称(作品名)")
     parser.add_argument("--summary", default="", help="简介")
     parser.add_argument("--detail", default="", help="详细介绍")
-    parser.add_argument("--prompt", default="", help="角色设定(人格prompt)")
-    parser.add_argument("--greeting", default="", help="开场白")
+    parser.add_argument("--char-name", default="小风", help="角色卡中的角色名")
+    parser.add_argument("--char-occupation", default="AI精灵", help="角色职业")
+    parser.add_argument("--char-age", default="18", help="角色年龄")
+    parser.add_argument("--char-gender", default="女", help="角色性别")
     parser.add_argument("--cover", default="", help="封面图路径")
     parser.add_argument("--chat-bg", default="", help="聊天背景图路径")
     parser.add_argument("--mobile-bg", default="", help="移动端背景图路径")
@@ -213,11 +391,10 @@ def main():
 
     # 合并配置
     cfg = load_json(args.json) if args.json and os.path.exists(args.json) else {}
-    for key in ["name", "summary", "detail", "prompt", "greeting",
-                "cover", "chat_bg", "mobile_bg"]:
+    for key in ["name", "summary", "detail", "char_name", "char_occupation",
+                "char_age", "char_gender", "cover", "chat_bg", "mobile_bg"]:
         val = getattr(args, key.replace("chat_bg", "chat_bg").replace("mobile_bg", "mobile_bg"), "") or cfg.get(key, "")
         cfg[key] = val
-    # map args with hyphens to config keys
     cfg["chat_bg"] = cfg.get("chat_bg") or args.chat_bg
     cfg["mobile_bg"] = cfg.get("mobile_bg") or args.mobile_bg
 
@@ -243,9 +420,11 @@ def main():
         maker.screenshot("D:\\Temp\\opencode\\step1.png")
         maker.next_step()
 
-        maker.step2_character(
-            prompt=cfg.get("prompt", ""),
-            greeting=cfg.get("greeting", ""),
+        maker.step2_add_character(
+            name=cfg.get("char_name", "小风"),
+            occupation=cfg.get("char_occupation", "AI精灵"),
+            age=cfg.get("char_age", "18"),
+            gender=cfg.get("char_gender", "女"),
         )
         maker.screenshot("D:\\Temp\\opencode\\step2.png")
         maker.next_step()
