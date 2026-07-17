@@ -29,21 +29,25 @@ const PYTHON = findPython();
 // ============================================================
 
 function findPython() {
-  const candidates = [
-    'python3', 'python',
-    'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python310\\python.exe',
-  ];
-  for (const cmd of candidates) {
-    try {
-      execSync(`${cmd} -c "import sys; print(sys.version)"`, { stdio: 'ignore' });
-      return cmd;
-    } catch {}
-  }
+  try {
+    const out = execSync('where python', { encoding: 'utf-8', stdio: 'pipe' });
+    const paths = out.trim().split('\n').filter(Boolean);
+    if (paths.length > 0) return paths[0].trim();
+  } catch {}
   return 'python';
 }
 
 function run(cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf-8', stdio: opts.silent ? 'pipe' : 'inherit', ...opts });
+  const stdio = opts.silent ? 'pipe' : 'inherit';
+  return execSync(cmd, { encoding: 'utf-8', stdio, ...opts });
+}
+
+function runCapture(cmd) {
+  try {
+    return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+  } catch (e) {
+    return e.stderr ? e.stderr.toString() : '';
+  }
 }
 
 function checkPkg(name) {
@@ -102,6 +106,19 @@ async function checkEnvironment() {
     console.log(`  ! 缺少依赖: ${missing.join(', ')}`);
     const ans = await ask('  是否自动安装? (Y/n): ');
     if (ans.toLowerCase() !== 'n') {
+      // Check if pip is available
+      const pipCheck = runCapture(`${PYTHON} -m pip --version`);
+      if (pipCheck.includes('No module named pip') || pipCheck.includes('not recognized')) {
+        console.log('  ! pip 不可用，尝试安装 pip...');
+        const ensureOut = runCapture(`${PYTHON} -m ensurepip --upgrade`);
+        if (ensureOut.includes('Error') || ensureOut.includes('No module')) {
+          console.log('  ✗ 无法自动安装 pip。请手动运行:');
+          console.log(`    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py`);
+          console.log(`    ${PYTHON} get-pip.py`);
+          process.exit(1);
+        }
+        console.log('  ✓ pip 安装成功');
+      }
       run(`${PYTHON} -m pip install flask openai playwright pillow`);
       // Install playwright browser
       try {
@@ -176,21 +193,12 @@ async function configure() {
     if (pw) cfg.password = pw;
   }
 
-  // Images paths
+  // Images paths (use defaults if not set)
   const coverDefault = path.join(IMG_DIR, 'cover.png');
-  if (!cfg.cover) {
-    console.log(`  封面图路径 (留空自动生成): `);
-    const cover = await ask(`  (默认 ${coverDefault}): `);
-    cfg.cover = cover || coverDefault;
-  }
-  if (!cfg.chat_bg) {
-    const bg = await ask(`  聊天背景图路径 (留空自动生成): `);
-    cfg.chat_bg = bg || path.join(IMG_DIR, 'chat_bg.png');
-  }
-  if (!cfg.mobile_bg) {
-    const mb = await ask(`  移动端背景图路径 (留空自动生成): `);
-    cfg.mobile_bg = mb || path.join(IMG_DIR, 'mobile_bg.png');
-  }
+  if (!cfg.cover) cfg.cover = coverDefault;
+  if (!cfg.chat_bg) cfg.chat_bg = path.join(IMG_DIR, 'chat_bg.png');
+  if (!cfg.mobile_bg) cfg.mobile_bg = path.join(IMG_DIR, 'mobile_bg.png');
+  console.log('  ✓ 图片路径已设（自动生成占位图）');
 
   saveSettings(cfg);
   return cfg;
