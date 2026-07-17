@@ -200,7 +200,7 @@ async function configure() {
     const ans = await ask('  使用现有配置? (Y/n): ');
     if (ans.toLowerCase() !== 'n') return cfg;
     // Reset so all fields are re-asked
-    cfg = {};
+    Object.keys(cfg).forEach(k => delete cfg[k]);
   }
 
   // API Key
