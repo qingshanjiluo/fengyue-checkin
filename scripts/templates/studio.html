@@ -230,7 +230,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
 </div>
 
 <!-- 图片预览弹窗 -->
-<div id="imgPreviewModal" onclick="this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:1000;display:none;align-items:center;justify-content:center;cursor:pointer">
+<div id="imgPreviewModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center;cursor:pointer" onclick="this.style.display='none'">
   <img id="imgPreviewContent" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5)">
 </div>
 
@@ -380,8 +380,10 @@ function switchPanel(name) {
   currentPanel = name;
   document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.panel === name));
   document.getElementById('panel-settings').style.display = name === 'settings' ? '' : 'none';
+  document.getElementById('panel-images').style.display = name === 'images' ? '' : 'none';
   document.getElementById('panel-hotlist').style.display = name === 'hotlist' ? '' : 'none';
   if (name === 'hotlist') loadHotlist();
+  if (name === 'images') loadImages();
 }
 
 function toggleHotlist() {
@@ -682,12 +684,6 @@ function setImgField(field, name) {
   showToast('✅ 已设为' + ({cover:'封面',chatbg:'聊天背景',mobilebg:'移动背景'})[field] + ': ' + name);
 }
 
-// Override switchPanel to load images when switching to image tab
-const _origSwitchPanel = switchPanel;
-switchPanel = function(name) {
-  _origSwitchPanel(name);
-  if (name === 'images') loadImages();
-};
 </script>
 </body>
 </html>
