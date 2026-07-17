@@ -2,7 +2,7 @@ name: fengyue daily check-in
 
 on:
   schedule:
-    - cron: "30 0 * * *"
+    - cron: "0 22 * * *"
   workflow_dispatch:
 
 jobs:
