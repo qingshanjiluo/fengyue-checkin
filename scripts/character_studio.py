@@ -139,8 +139,6 @@ def api_delete_image(name):
         os.remove(fpath)
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "Not found"}), 404
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 502
 
 def get_hotlist_browser():
     global hotlist_browser
