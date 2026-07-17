@@ -48,6 +48,28 @@ def api_save_settings():
     save_settings(data)
     return jsonify({"ok": True})
 
+@app.route("/api/models", methods=["GET"])
+def api_list_models():
+    api_url = request.args.get("api_url", "").rstrip("/")
+    api_key = request.args.get("api_key", "")
+    if not api_url or not api_key:
+        return jsonify({"error": "Missing api_url or api_key"}), 400
+
+    import urllib.request, urllib.error
+    req = urllib.request.Request(f"{api_url}/models")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        models = [m["id"] for m in data.get("data", []) if m.get("id")]
+        models.sort()
+        return jsonify({"ok": True, "models": models})
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:200]
+        return jsonify({"ok": False, "error": f"HTTP {e.code}: {body}"}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
 def get_hotlist_browser():
     global hotlist_browser
     if hotlist_browser is None:
@@ -109,6 +131,9 @@ def api_chat():
     api_key = settings.get("api_key", "")
     api_url = settings.get("api_url", "https://api.openai.com/v1")
     model = settings.get("model", "gpt-4o-mini")
+    # Support comma-separated models, use the first one
+    if model and "," in model:
+        model = model.split(",")[0].strip()
 
     if not api_key:
         return jsonify({"error": "请先在设置中配置 OpenAI API Key"}), 400
