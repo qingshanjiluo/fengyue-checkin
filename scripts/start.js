@@ -29,11 +29,23 @@ const PYTHON = findPython();
 // ============================================================
 
 function findPython() {
-  try {
-    const out = execSync('where python', { encoding: 'utf-8', stdio: 'pipe' });
-    const paths = out.trim().split('\n').filter(Boolean);
-    if (paths.length > 0) return paths[0].trim();
-  } catch {}
+  const candidates = [
+    'python3', 'python',
+    'D:\\Program Files\\bin\\python.exe',
+    'D:\\Program Files\\Python312\\python.exe',
+    'D:\\Program Files\\Python310\\python.exe',
+    'C:\\Program Files\\Python312\\python.exe',
+    'C:\\Program Files\\Python310\\python.exe',
+    'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
+    'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python310\\python.exe',
+  ];
+  for (const cmd of candidates) {
+    try {
+      execSync(`"${cmd}" -c "import sys"`, { stdio: 'ignore' });
+      // Quote path if it has spaces
+      return cmd.includes(' ') ? `"${cmd}"` : cmd;
+    } catch {}
+  }
   return 'python';
 }
 
