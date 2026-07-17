@@ -153,6 +153,17 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
         </div>
       </div>
 
+      <h3>⚙️ 发布选项</h3>
+      <div class="settings-group">
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="s-anonymous" style="accent-color:#7c3aed;width:16px;height:16px">
+            默认匿名发布
+          </label>
+          <div class="hint">开启后每次创建角色卡默认匿名</div>
+        </div>
+      </div>
+
       <h3>🎭 默认角色形象</h3>
       <div class="settings-group">
         <div class="field">
@@ -234,6 +245,7 @@ async function loadSettings() {
     document.getElementById('s-cover').value = settings.cover || '';
     document.getElementById('s-chatbg').value = settings.chat_bg || '';
     document.getElementById('s-mobilebg').value = settings.mobile_bg || '';
+    document.getElementById('s-anonymous').checked = settings.anonymous || false;
 
     // Restore model checkboxes from saved comma-separated model list
     const selectedModels = (settings.model || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -300,6 +312,7 @@ async function saveSettings() {
     cover: document.getElementById('s-cover').value,
     chat_bg: document.getElementById('s-chatbg').value,
     mobile_bg: document.getElementById('s-mobilebg').value,
+    anonymous: document.getElementById('s-anonymous').checked,
   };
   await fetch(BASE + 'api/settings', {
     method: 'POST',
@@ -513,6 +526,18 @@ async function sendMsg() {
     if (data.error) {
       addMsg('system', '⚠️ ' + data.error);
       setStatus('就绪', false);
+      document.getElementById('sendBtn').disabled = false;
+      return;
+    }
+
+    // If AI needs more info, show questions inline
+    if (data.needs_info && data.questions && data.questions.length > 0) {
+      let qHtml = data.plan ? '<p>' + data.plan.replace(/\n/g, '<br>') + '</p>' : '';
+      qHtml += '<p style="margin-top:8px;color:#eab308;font-weight:600">AI 需要确认以下信息：</p><ul style="margin:6px 0 0 16px;color:#94a3b8">';
+      data.questions.forEach(q => { qHtml += '<li style="margin:4px 0">' + escHtml(q) + '</li>'; });
+      qHtml += '</ul><p style="margin-top:8px;font-size:12px;color:#666">请在输入框中补充回答上述问题</p>';
+      addMsg('assistant', qHtml);
+      setStatus('等待补充信息', false);
       document.getElementById('sendBtn').disabled = false;
       return;
     }

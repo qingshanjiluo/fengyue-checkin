@@ -211,10 +211,13 @@ def api_chat():
     settings = load_settings()
     api_key = settings.get("api_key", "")
     api_url = settings.get("api_url", "https://api.openai.com/v1")
-    model = settings.get("model", "gpt-4o-mini")
+    default_model = settings.get("default_model", "") or settings.get("model", "gpt-4o-mini")
+    model = default_model
     # Support comma-separated models, use the first one
     if model and "," in model:
         model = model.split(",")[0].strip()
+
+    default_anonymous = settings.get("anonymous", False)
 
     if not api_key:
         return jsonify({"error": "请先在设置中配置 OpenAI API Key"}), 400
@@ -226,40 +229,62 @@ def api_chat():
     except Exception as e:
         return jsonify({"error": f"OpenAI 客户端初始化失败: {e}"}), 500
 
-    system_prompt = """你是一个角色卡制作助手。用户会描述他们想要的 AI 角色卡。
-请分析需求并输出 JSON（不要用 markdown 包裹），格式如下：
-{
-  "plan": "用自然语言向用户说明你将创建什么样的角色卡，包含角色名、性格、风格等关键信息（中文）",
-  "character": {
-    "name": "作品名称（角色卡对外名称）",
-    "summary": "一句话简介",
-    "detail": "详细介绍",
-    "char_name": "角色名",
+    system_prompt = f"""你是一个角色卡制作助手，帮助用户创建 AI 角色卡。
+
+## 核心流程
+1. 分析用户的角色描述，理解角色类型、风格、世界观
+2. 如果信息不足，返回 questions 数组向用户提问，不要自行猜测
+3. 信息充足后，输出完整的 JSON 角色设定
+
+## 输出格式（纯 JSON，不要 markdown 包裹）
+{{
+  "plan": "用自然语言向用户说明你将创建的角色卡，包含角色名、性格、风格等（中文）",
+  "questions": ["信息不足时列出问题，没问题则留空数组"],
+  "character": {{
+    "name": "作品名称（对外展示的角色卡名称）",
+    "summary": "一句话简介，20字以内",
+    "detail": "详细介绍，100-300字",
+    "char_name": "角色姓名",
     "char_occupation": "职业",
-    "char_age": "年龄",
+    "char_age": "年龄（数字字符串，如"18"）",
     "char_gender": "性别",
-    "char_appearance": "外貌描述",
-    "char_personality": "角色性格",
+    "char_appearance": "外貌描述（身高、发型、眼睛、衣着等）",
+    "char_personality": "角色性格（标签式，如"温柔、善良、乐观"）",
     "char_tone": "说话语气/口吻",
-    "char_background": "背景设定",
-    "cover_image": "图片文件名（从下方可用图片中选择，留空自动生成）",
-    "chat_bg_image": "聊天背景图片文件名（从下方可用图片中选择，留空自动生成）",
-    "mobile_bg_image": "移动端背景图片文件名（从下方可用图片中选择，留空自动生成）"
-  }
-}
-注意：
-- 如果用户描述不完整，请合理补充细节
-- 所有字段都用中文
-- char_age 填数字字符串如 "18"
-- cover_image/chat_bg_image/mobile_bg_image 从下方可用图片中选择文件名
-- 输出纯 JSON，不要 markdown"""
-    # Append available images to system prompt
+    "char_background": "背景设定（世界观中的起源故事）",
+    "cover_image": "封面图片文件名，从下方可用图片中选择最匹配的，无匹配留空",
+    "chat_bg_image": "聊天背景图片文件名，从下方可用图片中选择最匹配的，无匹配留空",
+    "mobile_bg_image": "移动背景图片文件名，从下方可用图片中选择最匹配的，无匹配留空",
+    "tags": ["角色标签数组，如"可爱","御姐","古风"，2-4个"],
+    "anonymous": {"true" if default_anonymous else "false"}
+  }}
+}}
+
+## 必须遵守的规则
+1. 信息不足时 → 只返回 plan + questions，不生成 character
+2. questions 非空时 → 绝对不生成 character
+3. 图片选择 → 根据角色风格匹配最合适的图片，无合适图片则留空
+4. 所有字段用中文
+5. 输出纯 JSON，不要任何 markdown 标记"""
+
+    # Append available images with dimensions for AI selection
     available = []
     for fname in os.listdir(UPLOAD_FOLDER):
-        if os.path.splitext(fname)[1].lower() in ALLOWED_EXT:
-            available.append(fname)
+        ext = os.path.splitext(fname)[1].lower()
+        if ext in ALLOWED_EXT:
+            fpath = os.path.join(UPLOAD_FOLDER, fname)
+            size_desc = ""
+            try:
+                from PIL import Image
+                with Image.open(fpath) as img:
+                    size_desc = f" ({img.size[0]}x{img.size[1]})"
+            except:
+                pass
+            available.append(f"  {fname}{size_desc}")
     if available:
-        system_prompt += f"\n\n可用图片文件（文件名列表）:\n" + "\n".join(f"- {f}" for f in available)
+        system_prompt += f"\n\n## 可用图片（文件名 + 尺寸，请根据角色风格匹配合适的图片）\n" + "\n".join(available)
+    else:
+        system_prompt += "\n\n## 注意：当前没有可用图片，cover_image/chat_bg_image/mobile_bg_image 都留空，将自动生成占位图"
 
     try:
         resp = client.chat.completions.create(
@@ -282,7 +307,21 @@ def api_chat():
         return jsonify({"error": f"AI 调用失败: {e}"}), 500
 
     plan = parsed.get("plan", "")
+    questions = parsed.get("questions", [])
     character = parsed.get("character", {})
+
+    # If AI has questions, return them and wait
+    if questions and len(questions) > 0:
+        return jsonify({
+            "plan": plan,
+            "questions": questions,
+            "steps": [],
+            "task_id": None,
+            "needs_info": True,
+        })
+
+    if not character:
+        return jsonify({"error": "AI 未能生成角色设定，请提供更详细的描述"}), 400
 
     # Start background task
     task_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(threading.get_ident())
@@ -297,6 +336,7 @@ def api_chat():
             "result": None,
             "settings": settings,
             "character": character,
+            "anonymous": default_anonymous,
         }
 
     t = threading.Thread(target=run_automation, args=(task_id,), daemon=True)
@@ -352,6 +392,7 @@ def run_automation(task_id):
     try:
         settings = load_settings()
         char = tasks[task_id]["character"]
+        default_anonymous = tasks[task_id].get("anonymous", False)
 
         update(step=0, text="AI 分析完成，开始执行", log="[AI] 角色设定已生成")
 
@@ -470,8 +511,9 @@ def run_automation(task_id):
 
             # Step 5: Publish
             update(step=4, text="正在发布角色卡...", log="[Step 5/5] 发布中")
-            maker.step4_publish()
-            update(log=f"[OK] 已发布: {maker.page.url}")
+            anonymous = char.get("anonymous", False) if isinstance(char.get("anonymous"), bool) else default_anonymous
+            maker.step4_publish(anonymous=anonymous)
+            update(log=f"[OK] 已发布{'（匿名）' if anonymous else ''}: {maker.page.url}")
 
             char_id = maker.page.url.split('/')[-2] if 'character' in maker.page.url else ''
             result_url = f"{BASE_URL}/zh/explore/installed/{char_id}" if char_id else maker.page.url

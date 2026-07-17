@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-风月AI 热榜爬虫
-提取探索页各排行榜的作品列表
+风月AI 热榜爬虫 - 提取探索页各排行榜作品列表
 """
 import sys, json, re
 sys.stdout.reconfigure(encoding="utf-8")
@@ -35,14 +34,12 @@ def extract_cards(page, ranking="weekly"):
                 const text = card ? (card.innerText || '').trim() : a.innerText.trim();
                 const lines = text.split('\\n').map(l => l.trim()).filter(l => l);
 
-                // Play count
                 let playCount = '';
                 for (const l of lines) {
                     const m = l.match(/([\\d,.]+)\\s*[亿万]/);
                     if (m) { playCount = m[0]; break; }
                 }
 
-                // Title (usually after play count)
                 let title = '';
                 for (const l of lines) {
                     if (l !== playCount && l !== '' && !l.includes('作者') && !l.match(/^[\\d.]+$/) && !l.includes('/')) {
@@ -50,7 +47,6 @@ def extract_cards(page, ranking="weekly"):
                     }
                 }
 
-                // Author
                 let author = '';
                 for (const l of lines) {
                     if (l.startsWith('作者：') || l.startsWith('作者:')) {
@@ -59,22 +55,19 @@ def extract_cards(page, ranking="weekly"):
                     }
                 }
 
-                // Rating
                 let rating = '';
                 for (const l of lines) {
                     const m = l.match(/^([\\d.]+)$/);
                     if (m) { const v = parseFloat(m[1]); if (v > 0 && v <= 10) { rating = m[1]; break; } }
                 }
 
-                // Tags
                 let tags = '';
                 for (const l of lines) {
-                    if (l.includes('/') && l.length < 80 && !l.startsWith('作者') && !l.startsWith('作者')) {
+                    if (l.includes('/') && l.length < 80 && !l.startsWith('作者')) {
                         tags = l; break;
                     }
                 }
 
-                // Description (first long text)
                 let description = '';
                 for (const l of lines) {
                     if (l.length > 30 && l !== playCount && !l.startsWith('作者') && !l.match(/^[\\d.]+$/) && !l.includes('http')) {
@@ -83,15 +76,12 @@ def extract_cards(page, ranking="weekly"):
                 }
 
                 results.push({
-                    uuid,
+                    uuid, title: title.slice(0, 100),
                     url: 'https://aiaha.xyz' + href,
-                    title: title.slice(0, 100),
-                    playCount,
-                    author: author.slice(0, 40),
-                    rating,
-                    tags: tags.slice(0, 100),
+                    playCount, author: author.slice(0, 40),
+                    rating, tags: tags.slice(0, 100),
                     description: description.slice(0, 300),
-                    ranking: ranking,
+                    ranking,
                 });
             }
             return results;
@@ -106,7 +96,7 @@ def fetch_ranking(page, ranking="weekly", display="simple"):
     return extract_cards(page, ranking)
 
 def format_for_ai(card):
-    """将作品卡片格式化为 AI prompt 参考"""
+    """将作品卡片格式化为 AI prompt 参考文本"""
     return f"""作品: {card.get('title', '')}
 热度: {card.get('playCount', '')}
 作者: {card.get('author', '')}
@@ -121,7 +111,6 @@ if __name__ == "__main__":
         ctx = browser.new_context(viewport={"width": 1280, "height": 900})
         page = ctx.new_page()
 
-        # 需要登录
         page.goto("https://aiaha.xyz/zh/signin")
         page.wait_for_load_state("networkidle")
         page.locator('input[type="email"]').first.fill("sifangzhiji@qq.com")
