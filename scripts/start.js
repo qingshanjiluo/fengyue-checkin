@@ -22,31 +22,41 @@ const SCRIPTS_DIR = __dirname;
 const ROOT_DIR = path.resolve(SCRIPTS_DIR, '..');
 const SETTINGS_FILE = path.join(SCRIPTS_DIR, 'studio_settings.json');
 const IMG_DIR = path.join(ROOT_DIR, 'generated_imgs');
-const PYTHON = findPython();
+let PYTHON = 'python';  // updated after user selects
 
 // ============================================================
 // 工具函数
 // ============================================================
 
-function findPython() {
+function q(s) { return s.includes(' ') ? `"${s}"` : s; }
+
+function findAllPython() {
+  const seen = new Set();
+  const found = [];
   const candidates = [
     'python3', 'python',
     'D:\\Program Files\\bin\\python.exe',
     'D:\\Program Files\\Python312\\python.exe',
     'D:\\Program Files\\Python310\\python.exe',
+    'D:\\Program Files\\Python313\\python.exe',
     'C:\\Program Files\\Python312\\python.exe',
     'C:\\Program Files\\Python310\\python.exe',
+    'C:\\Program Files\\Python313\\python.exe',
     'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
     'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python310\\python.exe',
+    'C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python313\\python.exe',
   ];
   for (const cmd of candidates) {
+    const norm = cmd.toLowerCase().replace(/"/g, '');
+    if (seen.has(norm)) continue;
+    seen.add(norm);
     try {
-      execSync(`"${cmd}" -c "import sys"`, { stdio: 'ignore' });
-      // Quote path if it has spaces
-      return cmd.includes(' ') ? `"${cmd}"` : cmd;
+      const out = execSync(`"${cmd}" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+      const hasPip = execSync(`"${cmd}" -m pip --version 2>nul`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
+      found.push({ cmd: q(cmd), version: out, pip: !hasPip.includes('No module') });
     } catch {}
   }
-  return 'python';
+  return found;
 }
 
 function run(cmd, opts = {}) {
@@ -95,14 +105,43 @@ function saveSettings(data) {
 
 async function checkEnvironment() {
   console.log('\n━━━━ 环境检查 ━━━━');
-  
-  // Python
-  try {
-    const ver = run(`${PYTHON} -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"`, { silent: true }).trim();
-    console.log(`  ✓ Python ${ver}`);
-  } catch {
-    console.error('  ✗ Python 未找到，请安装 Python 3.10+');
+
+  const allPython = findAllPython();
+  if (allPython.length === 0) {
+    console.error('  ✗ 未找到任何 Python，请安装 Python 3.10+');
     process.exit(1);
+  }
+
+  // Print available Pythons
+  console.log('  找到以下 Python:');
+  allPython.forEach((p, i) => {
+    console.log(`    [${i}] ${p.cmd}  (v${p.version})  pip: ${p.pip ? '✓' : '✗'}`);
+  });
+
+  // Auto-select: prefer one with pip
+  let selectedIndex = allPython.findIndex(p => p.pip);
+  if (selectedIndex === -1) selectedIndex = 0;
+
+  // Only ask if multiple choices
+  if (allPython.length > 1) {
+    const ans = await ask(`  选择 Python [0-${allPython.length - 1}] (默认 ${selectedIndex}): `);
+    const n = parseInt(ans);
+    if (!isNaN(n) && n >= 0 && n < allPython.length) selectedIndex = n;
+  }
+
+  const selected = allPython[selectedIndex];
+  PYTHON = selected.cmd;
+  console.log(`  → 使用: ${selected.cmd}`);
+
+  if (!selected.pip) {
+    console.log('  ! 所选 Python 没有 pip，尝试安装...');
+    const out = runCapture(`${PYTHON} -m ensurepip --upgrade 2>&1`);
+    if (out.includes('Error') || out.includes('No module')) {
+      console.log('  ✗ 无法自动安装 pip。试试选择另一个 Python，或手动安装:');
+      console.log(`    ${out.slice(0, 200)}`);
+      process.exit(1);
+    }
+    console.log('  ✓ pip 安装成功');
   }
 
   // 依赖
@@ -118,19 +157,6 @@ async function checkEnvironment() {
     console.log(`  ! 缺少依赖: ${missing.join(', ')}`);
     const ans = await ask('  是否自动安装? (Y/n): ');
     if (ans.toLowerCase() !== 'n') {
-      // Check if pip is available
-      const pipCheck = runCapture(`${PYTHON} -m pip --version`);
-      if (pipCheck.includes('No module named pip') || pipCheck.includes('not recognized')) {
-        console.log('  ! pip 不可用，尝试安装 pip...');
-        const ensureOut = runCapture(`${PYTHON} -m ensurepip --upgrade`);
-        if (ensureOut.includes('Error') || ensureOut.includes('No module')) {
-          console.log('  ✗ 无法自动安装 pip。请手动运行:');
-          console.log(`    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py`);
-          console.log(`    ${PYTHON} get-pip.py`);
-          process.exit(1);
-        }
-        console.log('  ✓ pip 安装成功');
-      }
       run(`${PYTHON} -m pip install flask openai playwright pillow`);
       // Install playwright browser
       try {
