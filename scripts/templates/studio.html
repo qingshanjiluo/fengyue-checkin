@@ -185,7 +185,8 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
     <div class="hotlist-panel" id="panel-images" style="display:none">
       <div class="imglib-upload">
         <label for="imgUpload">📤 上传图片</label>
-        <input type="file" id="imgUpload" accept="image/*" multiple onchange="uploadImages(this.files)">
+        <label onclick="document.getElementById('imgUpload').click()" style="background:#3a3a5a">📂 打开本地文件夹</label>
+        <input type="file" id="imgUpload" accept="image/*" multiple onchange="uploadImages(this.files)" style="display:none">
       </div>
       <div class="imglib-grid" id="imgGrid">
         <div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">加载中...</div>
@@ -226,6 +227,11 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f0f1a;color:#e
 <div class="status-bar">
   <span class="dot" id="statusDot"></span>
   <span id="statusText">就绪</span>
+</div>
+
+<!-- 图片预览弹窗 -->
+<div id="imgPreviewModal" onclick="this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:1000;display:none;align-items:center;justify-content:center;cursor:pointer">
+  <img id="imgPreviewContent" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5)">
 </div>
 
 <script>
@@ -613,7 +619,7 @@ loadSettings();
 
 async function loadImages() {
   const grid = document.getElementById('imgGrid');
-  grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">加载中...</div>';
+  grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">⏳ 加载中...</div>';
   try {
     const r = await fetch(BASE + 'api/images');
     const data = await r.json();
@@ -623,18 +629,20 @@ async function loadImages() {
     }
     window._imgData = data.images;
     if (data.images.length === 0) {
-      grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">暂无图片，点击上方上传</div>';
+      grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#666;font-size:13px;grid-column:1/-1">暂无图片，点击上方📤上传或📂打开本地文件夹</div>';
       return;
     }
     grid.innerHTML = data.images.map(img => {
       const dims = (img.width && img.height) ? `${img.width}×${img.height}` : '';
-      return '<div class="imglib-item" title="' + img.name + '">' +
-        '<img src="' + img.thumb + '?t=' + Date.now() + '" loading="lazy">' +
-        '<div class="name">' + escHtml(img.name) + (dims ? ' (' + dims + ')' : '') + '</div>' +
+      const sizeStr = img.size ? (img.size / 1024).toFixed(0) + 'KB' : '';
+      return '<div class="imglib-item">' +
+        '<img src="' + img.thumb + '?t=' + Date.now() + '" loading="lazy" onclick="previewImg(\'' + img.url + '\')" style="cursor:pointer">' +
+        '<div class="name" title="' + escHtml(img.name) + '">' + escHtml(img.name) + (dims ? ' (' + dims + ')' : '') + (sizeStr ? ' ' + sizeStr : '') + '</div>' +
         '<div class="actions">' +
           '<button class="use" onclick="event.stopPropagation();setImgField(\'cover\',\'' + img.name.replace(/'/g,"\\'") + '\')">📺</button>' +
           '<button class="use" onclick="event.stopPropagation();setImgField(\'chatbg\',\'' + img.name.replace(/'/g,"\\'") + '\')">💬</button>' +
           '<button class="use" onclick="event.stopPropagation();setImgField(\'mobilebg\',\'' + img.name.replace(/'/g,"\\'") + '\')">📱</button>' +
+          '<button class="use" onclick="event.stopPropagation();addImgToChat(\'' + img.name.replace(/'/g,"\\'") + '\')" style="background:#0891b2">🤖</button>' +
           '<button class="del" onclick="event.stopPropagation();deleteImage(\'' + img.name.replace(/'/g,"\\'") + '\')">✕</button>' +
         '</div>' +
       '</div>';
@@ -642,6 +650,25 @@ async function loadImages() {
   } catch(e) {
     grid.innerHTML = '<div style="text-align:center;padding:40px 0;color:#ef4444;font-size:13px;grid-column:1/-1">⚠️ 请求失败: ' + e.message + '</div>';
   }
+}
+
+function previewImg(url) {
+  const modal = document.getElementById('imgPreviewModal');
+  const img = document.getElementById('imgPreviewContent');
+  img.src = url + '?t=' + Date.now();
+  modal.style.display = 'flex';
+}
+
+function addImgToChat(name) {
+  const imgs = window._imgData || [];
+  const img = imgs.find(i => i.name === name);
+  const info = img ? `（${img.width||'?'}×${img.height||'?'}）` : '';
+  const prompt = `我在图片库中有一张图片可用: ${name}${info}\n请根据角色风格选择是否使用这张图片作为封面或背景。`;
+  const input = document.getElementById('chatInput');
+  input.value = prompt;
+  input.focus();
+  switchPanel('settings');
+  showToast('✅ 已填入图片信息到对话');
 }
 
 function setImgField(field, name) {

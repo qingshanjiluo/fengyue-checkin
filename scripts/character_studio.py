@@ -26,9 +26,39 @@ tasks = {}
 tasks_lock = threading.Lock()
 hotlist_cache = {"data": None, "time": 0, "ranking": None}
 hotlist_cache_lock = threading.Lock()
-hotlist_browser = None
-hotlist_playwright = None
-hotlist_lock = threading.Lock()  # Serialize Playwright ops (not thread-safe)
+
+# ── 热榜专用线程（Playwright 非线程安全，所有操作在同一个线程执行）──
+import queue as _queue
+_hotlist_req_q = _queue.Queue()
+_hotlist_resp_q = _queue.Queue()
+
+def _hotlist_worker():
+    from playwright.sync_api import sync_playwright
+    p = sync_playwright().start()
+    browser = p.chromium.launch(headless=True, slow_mo=100)
+    while True:
+        req = _hotlist_req_q.get()
+        if req is None:
+            break
+        ranking, settings = req
+        try:
+            ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+            page = ctx.new_page()
+            page.goto(f"{BASE_URL}/zh/signin")
+            page.wait_for_load_state("networkidle")
+            if settings.get("email"):
+                page.locator('input[type="email"]').first.fill(settings.get("email", ""))
+                page.locator('input[type="password"]').first.fill(settings.get("password", ""))
+                page.keyboard.press("Enter")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(2000)
+            cards = fetch_ranking(page, ranking)
+            ctx.close()
+            _hotlist_resp_q.put(cards)
+        except Exception as e:
+            _hotlist_resp_q.put(e)
+
+threading.Thread(target=_hotlist_worker, daemon=True).start()
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -144,19 +174,10 @@ def api_delete_image(name):
     return jsonify({"ok": False, "error": "Not found"}), 404
 
 def get_hotlist_browser():
-    global hotlist_browser, hotlist_playwright
-    with hotlist_lock:
-        if hotlist_browser is None:
-            from playwright.sync_api import sync_playwright
-            hotlist_playwright = sync_playwright().start()
-            hotlist_browser = hotlist_playwright.chromium.launch(headless=True, slow_mo=100)
-    return hotlist_browser
+    return None  # Browser runs in dedicated thread
 
 def hotlist_new_page(browser):
-    """Create a fresh page in a new context (thread-safe, called under hotlist_lock)."""
-    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
-    page = ctx.new_page()
-    return page, ctx
+    return None, None
 
 @app.route("/api/hotlist", methods=["GET"])
 def api_hotlist():
@@ -167,35 +188,27 @@ def api_hotlist():
         if not refresh and hotlist_cache["data"] and hotlist_cache["ranking"] == ranking and (time.time() - hotlist_cache["time"]) < 120:
             return jsonify({"ok": True, "ranking": ranking, "items": hotlist_cache["data"], "cached": True})
 
+    # Send request to dedicated thread
+    settings = load_settings()
+    _hotlist_req_q.put((ranking, settings))
     try:
-        browser = get_hotlist_browser()
-        with hotlist_lock:
-            page, ctx = hotlist_new_page(browser)
+        result = _hotlist_resp_q.get(timeout=30)
+    except _queue.Empty:
+        return jsonify({"ok": False, "error": "热榜请求超时"}), 504
 
-            # Ensure logged in
-            settings = load_settings()
-            page.goto(f"{BASE_URL}/zh/signin")
-            page.wait_for_load_state("networkidle")
-            page.locator('input[type="email"]').first.fill(settings.get("email", ""))
-            page.locator('input[type="password"]').first.fill(settings.get("password", ""))
-            page.keyboard.press("Enter")
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(2000)
+    if isinstance(result, Exception):
+        return jsonify({"ok": False, "error": str(result)}), 500
 
-            cards = fetch_ranking(page, ranking)
-            ctx.close()
+    cards = result
+    if not cards:
+        return jsonify({"ok": False, "error": "未提取到数据"}), 500
 
-        if not cards:
-            return jsonify({"ok": False, "error": "未提取到数据"}), 500
+    with hotlist_cache_lock:
+        hotlist_cache["data"] = cards
+        hotlist_cache["time"] = time.time()
+        hotlist_cache["ranking"] = ranking
 
-        with hotlist_cache_lock:
-            hotlist_cache["data"] = cards
-            hotlist_cache["time"] = time.time()
-            hotlist_cache["ranking"] = ranking
-
-        return jsonify({"ok": True, "ranking": ranking, "items": cards, "cached": False})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True, "ranking": ranking, "items": cards, "cached": False})
 
 @app.route("/api/hotlist/rankings", methods=["GET"])
 def api_hotlist_rankings():
