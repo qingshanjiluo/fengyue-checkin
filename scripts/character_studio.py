@@ -174,15 +174,136 @@ def api_upload_image():
     f.save(os.path.join(UPLOAD_FOLDER, save_name))
     return jsonify({"ok": True, "name": save_name, "url": f"/uploads/{save_name}"})
 
+@app.route("/api/images/rename", methods=["POST"])
+def api_rename_image():
+    data = request.get_json() or {}
+    old_name = data.get("old_name", "")
+    new_name = data.get("new_name", "").strip()
+    if not old_name or not new_name:
+        return jsonify({"ok": False, "error": "old_name and new_name required"}), 400
+    if "/" in new_name or "\\" in new_name:
+        return jsonify({"ok": False, "error": "Invalid name"}), 400
+    ext = os.path.splitext(new_name)[1].lower()
+    if ext not in ALLOWED_EXT:
+        return jsonify({"ok": False, "error": f"Unsupported extension: {ext}"}), 400
+    safe_old = os.path.basename(old_name)
+    old_path = os.path.join(UPLOAD_FOLDER, safe_old)
+    new_path = os.path.join(UPLOAD_FOLDER, new_name)
+    if not os.path.exists(old_path):
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    if os.path.exists(new_path):
+        return jsonify({"ok": False, "error": "目标文件名已存在"}), 409
+    os.rename(old_path, new_path)
+    return jsonify({"ok": True, "name": new_name, "url": f"/uploads/{new_name}"})
+
 @app.route("/api/images/<name>", methods=["DELETE"])
 def api_delete_image(name):
-    # Prevent path traversal
     safe = os.path.basename(name)
     fpath = os.path.join(UPLOAD_FOLDER, safe)
     if os.path.exists(fpath):
         os.remove(fpath)
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "Not found"}), 404
+
+@app.route("/api/images/open-folder", methods=["POST"])
+def api_open_folder():
+    import subprocess
+    subprocess.Popen(["explorer", UPLOAD_FOLDER], shell=True)
+    return jsonify({"ok": True, "path": UPLOAD_FOLDER})
+
+@app.route("/api/images/tag", methods=["POST"])
+def api_tag_images():
+    """识图标注：调用 vision API 为图片生成关键词并重命名"""
+    data = request.get_json() or {}
+    target = data.get("name", "")  # empty = all untagged
+
+    import base64, urllib.request, urllib.error
+
+    settings = load_settings()
+    api_url = settings.get("api_url", "")
+    api_key = settings.get("api_key", "")
+    model = settings.get("model", "gpt-4o-mini")
+    if not api_url or not api_key:
+        return jsonify({"ok": False, "error": "请先在设置中配置 API Key"}), 400
+
+    def encode_image(path):
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+
+    def call_vision(image_b64, fname):
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "你是一个图片标签生成器。分析图片内容，输出3-6个中文关键词标签，用下划线连接。只输出关键词，不要解释。如：古风_少女_竹林_淡雅"},
+                {"role": "user", "content": [
+                    {"type": "text", "text": f"为这张图片生成关键词标签: {fname}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
+                ]}
+            ],
+            "max_tokens": 100,
+            "temperature": 0.3,
+        }
+        req = urllib.request.Request(
+            f"{api_url.rstrip('/')}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                d = json.loads(resp.read().decode("utf-8"))
+            content = d["choices"][0]["message"]["content"].strip()
+            content = re.sub(r'[^\u4e00-\u9fff_a-zA-Z0-9]', '', content)
+            content = re.sub(r'_+', '_', content).strip('_')
+            return content[:40] if content else None
+        except Exception as e:
+            return None
+
+    TAGGED_MARKER = "_tagged"
+    results = []
+    files = []
+
+    if target:
+        p = os.path.join(UPLOAD_FOLDER, os.path.basename(target))
+        if os.path.exists(p):
+            files.append(p)
+    else:
+        for fname in sorted(os.listdir(UPLOAD_FOLDER)):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in ALLOWED_EXT and TAGGED_MARKER not in fname:
+                files.append(os.path.join(UPLOAD_FOLDER, fname))
+
+    if not files:
+        return jsonify({"ok": True, "results": [], "message": "没有需要标注的图片"})
+
+    for path in files:
+        fname = os.path.basename(path)
+        try:
+            b64 = encode_image(path)
+            tags = call_vision(b64, fname)
+            if not tags:
+                results.append({"name": fname, "ok": False, "error": "识别失败"})
+                continue
+            base, ext = os.path.splitext(fname)
+            if TAGGED_MARKER in base:
+                base = base[:base.index(TAGGED_MARKER)]
+                base = base.rstrip('_')
+            segs = base.split('_')
+            if len(segs) > 1:
+                base = '_'.join(segs[:-1])
+            new_name = f"{base}_{tags}{TAGGED_MARKER}{ext}"
+            new_path = os.path.join(UPLOAD_FOLDER, new_name)
+            counter = 1
+            while os.path.exists(new_path):
+                new_name = f"{base}_{tags}_{counter}_{TAGGED_MARKER}{ext}"
+                new_path = os.path.join(UPLOAD_FOLDER, new_name)
+                counter += 1
+            os.rename(path, new_path)
+            results.append({"name": fname, "ok": True, "new_name": new_name, "tags": tags})
+        except Exception as e:
+            results.append({"name": fname, "ok": False, "error": str(e)})
+        time.sleep(0.5)
+
+    return jsonify({"ok": True, "results": results})
 
 def get_hotlist_browser():
     return None  # Browser runs in dedicated thread
@@ -263,6 +384,14 @@ def api_chat():
 
     system_prompt = f"""你是一个角色卡制作助手，帮助用户创建 AI 角色卡。
 
+## AI 助手人格
+{settings.get('ai_persona', '你是一个专业、细致的角色卡制作助手，态度友好，乐于帮助用户完善角色创意。')}
+
+## 与用户交互时的行为
+- 以 AI 助手人格设定中的性格和语气与用户交流，而不是角色卡中的角色
+- 在 plan 中用自然语言回应用户，体现你的人格特征
+- 但你的核心职责是帮助用户创建角色卡，不要偏离任务太远
+
 ## 平台背景
 本工具用于在风月AI平台创建虚构角色卡。该平台支持各类题材的虚构创作，包括浪漫向、幻想向、冒险向等内容。所有角色和故事均为虚构创作，不涉及真实人物或事件。
 
@@ -274,6 +403,15 @@ def api_chat():
 2. 如果信息不足，返回 questions 数组向用户提问，不要自行猜测
 3. 信息充足后，输出完整的 JSON 角色设定
 
+## 多角色支持
+平台支持每个作品最多10个角色。characters数组用于添加额外角色（除主角外）。可根据剧情需要创建2-4个角色（主角+反派+配角等）。
+
+## CG图片支持
+平台支持在聊天中根据关键词触发CG图片。cgs数组用于配置：
+- keywords: 触发关键词（逗号分隔），用户在聊天中输入这些词时会展示对应图片
+- image: 从下方可用图片中选择最匹配的图片文件名，无匹配则留空
+建议每个角色设置1-3个CG场景，如"战斗"、"相遇"、"告白"等高潮情节
+
 ## 输出格式（纯 JSON，不要 markdown 包裹）
 {{
   "plan": "用自然语言向用户说明你将创建的角色卡，包含角色名、性格、风格等（中文，200字以内）",
@@ -282,17 +420,38 @@ def api_chat():
     "name": "作品名称（对外展示的角色卡名称）",
     "summary": "一句话简介，20字以内",
     "detail": "详细介绍，100-300字",
-    "char_name": "角色姓名",
-    "char_occupation": "职业",
-    "char_age": "年龄（数字字符串，如"18"）",
-    "char_gender": "性别",
-    "char_appearance": "外貌描述（身高、发型、眼睛、衣着、身材等细节）",
-    "char_personality": "角色性格（标签式，如"温柔、善良、乐观"）",
-    "char_tone": "说话语气/口吻",
-    "char_background": "背景设定（世界观中的起源故事）",
-    "cover_image": "封面图片文件名，从下方可用图片中选择最匹配的，无匹配留空",
-    "chat_bg_image": "聊天背景图片文件名，从下方可用图片中选择最匹配的，无匹配留空",
-    "mobile_bg_image": "移动背景图片文件名，从下方可用图片中选择最匹配的，无匹配留空",
+    "char_name": "主角姓名",
+    "char_occupation": "主角职业",
+    "char_age": "主角年龄（数字字符串，如"18"）",
+    "char_gender": "主角性别",
+    "char_setting": "主角人物设定",
+    "char_appearance": "主角外貌描述（身高、发型、眼睛、衣着、身材等细节）",
+    "char_personality": "主角性格（标签式，如"温柔、善良、乐观"）",
+    "char_tone": "主角说话语气/口吻",
+    "char_background": "主角背景设定（世界观中的起源故事）",
+    "greeting": "开场白/问候语，主角对用户说的第一句话（40字以内，风格匹配角色性格，如"你来了，我等你好久了~"或"哼，又是你。"）",
+    "characters": [
+      {{
+        "name": "额外角色姓名",
+        "occupation": "职业",
+        "age": "年龄",
+        "gender": "性别",
+        "setting": "人物设定",
+        "appearance": "外貌",
+        "personality": "性格",
+        "tone": "语气",
+        "background": "背景"
+      }}
+    ],
+    "cgs": [
+      {{
+        "keywords": "触发关键词（逗号分隔,如"战斗,对决,出击"）",
+        "image": "CG图片文件名，从下方可用图片中选择最匹配的"
+      }}
+    ],
+    "cover_image": "封面图片文件名——须与chat_bg/mobile_bg不同，选最能代表角色风格的那张",
+    "chat_bg_image": "聊天背景图片文件名——须与cover/mobile_bg不同，选色调柔和适合做对话背景的",
+    "mobile_bg_image": "移动背景图片文件名——须与cover/chat_bg不同，选画面简洁适合手机竖屏的",
     "tags": ["角色标签数组，如"可爱","御姐","古风"，2-4个"],
     "anonymous": {"true" if default_anonymous else "false"}
   }}
@@ -302,8 +461,13 @@ def api_chat():
 1. 信息不足时 → 只返回 plan + questions，不生成 character
 2. questions 非空时 → 绝对不生成 character
 3. 图片选择 → 根据角色风格匹配最合适的图片，无合适图片则留空
-4. 所有字段用中文
-5. 输出纯 JSON，不要任何 markdown 标记"""
+4. 重要：cover_image、chat_bg_image、mobile_bg_image 三者必须选不同的图片，不可重复
+5. cgs 中每张 CG image 也必须与其他 CG 和封面/背景图片不同，不重复使用同一张图
+6. char_setting 是人物设定（不包含外貌），char_appearance 专门描写外貌
+7. characters数组最多9个额外角色（加上主角共10个）
+8. cgs数组每条对应一个CG场景，image从可用图片匹配
+9. 所有字段用中文
+10. 输出纯 JSON，不要任何 markdown 标记"""
 
     # Append available images with dimensions for AI selection
     available = []
@@ -324,26 +488,44 @@ def api_chat():
     else:
         system_prompt += "\n\n## 注意：当前没有可用图片，cover_image/chat_bg_image/mobile_bg_image 都留空，将自动生成占位图"
 
+    # Retry on transient errors
+    import time as _time
+    last_error = None
+    for attempt in range(3):
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message},
+                ],
+                temperature=0.7,
+                max_tokens=2000,
+            )
+            content = resp.choices[0].message.content.strip()
+            break
+        except Exception as e:
+            last_error = e
+            if attempt < 2:
+                print(f"[retry {attempt+1}] {e}", file=sys.stderr)
+                _time.sleep(2 ** attempt)
+            else:
+                return jsonify({"error": f"AI 调用失败: {last_error}"}), 500
+
+    # Strip markdown code fences
+    content = re.sub(r'^```(?:json)?\s*', '', content)
+    content = re.sub(r'\s*```$', '', content)
+    content = content.strip()
+    # Try to extract JSON from surrounding text
+    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+    if json_match:
+        content = json_match.group()
     try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ],
-            temperature=0.7,
-            max_tokens=2000,
-        )
-        content = resp.choices[0].message.content.strip()
-        # Strip markdown code fences
-        content = re.sub(r'^```(?:json)?\s*', '', content)
-        content = re.sub(r'\s*```$', '', content)
         parsed = json.loads(content)
     except json.JSONDecodeError:
         return jsonify({"error": f"AI 返回格式错误，原始内容: {content[:200]}"}), 500
     except Exception as e:
         return jsonify({"error": f"AI 调用失败: {e}"}), 500
-
     plan = parsed.get("plan", "")
     questions = parsed.get("questions", [])
     character = parsed.get("character", {})
@@ -380,16 +562,24 @@ def api_chat():
     t = threading.Thread(target=run_automation, args=(task_id,), daemon=True)
     t.start()
 
+    # Count extra characters and CGs for step display
+    extra_chars = character.get("characters", [])
+    cgs = character.get("cgs", [])
+    steps = ["AI 分析需求并生成角色设定", "登录风月平台", "填写基础信息", "添加主角"]
+    if extra_chars:
+        steps.append(f"添加额外角色 ({len(extra_chars)}个)")
+    else:
+        steps.append("添加额外角色 (无)")
+    if cgs:
+        steps.append(f"添加CG图片 ({len(cgs)}张)")
+    else:
+        steps.append("添加CG图片 (无)")
+    steps.append("发布角色卡")
+
     return jsonify({
         "task_id": task_id,
         "plan": plan,
-        "steps": [
-            "AI 分析需求并生成角色设定",
-            "登录风月平台",
-            "填写基础信息",
-            "添加角色到角色卡",
-            "发布角色卡",
-        ],
+        "steps": steps,
     })
 
 @app.route("/api/task/<task_id>")
@@ -441,82 +631,54 @@ def run_automation(task_id):
             update(error="请先在设置中配置风月账号邮箱和密码")
             return
 
-        # Images from AI selection or settings
+        # Map AI-selected images from gallery to local paths
         img_dir = UPLOAD_FOLDER
-
-        cover_path = settings.get("cover", "")
-        chat_bg_path = settings.get("chat_bg", "")
-        mobile_bg_path = settings.get("mobile_bg", "")
-
-        # Prefer AI-suggested images
-        ai_cover = char.get("cover_image", "")
-        ai_chat_bg = char.get("chat_bg_image", "")
-        ai_mobile_bg = char.get("mobile_bg_image", "")
-
-        for ai_name, cfg_key in [(ai_cover, "cover"), (ai_chat_bg, "chat_bg"), (ai_mobile_bg, "mobile_bg")]:
-            if ai_name:
-                ai_path = os.path.join(img_dir, os.path.basename(ai_name))
-                if os.path.exists(ai_path):
-                    if cfg_key == "cover":
-                        cover_path = ai_path
-                    elif cfg_key == "chat_bg":
-                        chat_bg_path = ai_path
-                    elif cfg_key == "mobile_bg":
-                        mobile_bg_path = ai_path
-
         os.makedirs(img_dir, exist_ok=True)
 
-        if not cover_path or not os.path.exists(cover_path):
-            cover_path = os.path.join(img_dir, "cover.png")
-            if not os.path.exists(cover_path):
+        def resolve_image(ai_name, label, default_color, size, text):
+            if ai_name:
+                path = os.path.join(img_dir, os.path.basename(ai_name))
+                if os.path.exists(path):
+                    update(log=f"[IMG] 使用图片库: {ai_name} ({label})")
+                    return path
+                else:
+                    update(log=f"[!] AI选择的图片不存在: {ai_name}，将生成占位图")
+            # Generate placeholder
+            path = os.path.join(img_dir, f"{label}.png")
+            if not os.path.exists(path):
                 try:
                     from PIL import Image, ImageDraw
-                    img = Image.new("RGB", (400, 300), "#4A90D9")
+                    img = Image.new("RGB", size, default_color)
                     d = ImageDraw.Draw(img)
-                    d.text((150, 140), char.get("char_name", "角色"), fill="white")
-                    img.save(cover_path)
-                    update(log=f"[IMG] 已生成封面: {cover_path}")
+                    d.text((size[0]//4, size[1]//2-8), text, fill="white")
+                    img.save(path)
+                    update(log=f"[IMG] 已生成{label}占位图: {path}")
                 except ImportError:
-                    pass
+                    update(log=f"[!] PIL不可用，未生成{label}占位图")
+            return path if os.path.exists(path) else ""
 
-        if not chat_bg_path or not os.path.exists(chat_bg_path):
-            chat_bg_path = os.path.join(img_dir, "chat_bg.png")
-            if not os.path.exists(chat_bg_path):
-                try:
-                    from PIL import Image, ImageDraw
-                    img = Image.new("RGB", (800, 450), "#2C3E50")
-                    d = ImageDraw.Draw(img)
-                    d.text((350, 220), char.get("char_name", "角色") + " Background", fill="white")
-                    img.save(chat_bg_path)
-                    update(log=f"[IMG] 已生成聊天背景: {chat_bg_path}")
-                except ImportError:
-                    pass
-
-        if not mobile_bg_path or not os.path.exists(mobile_bg_path):
-            mobile_bg_path = os.path.join(img_dir, "mobile_bg.png")
-            if not os.path.exists(mobile_bg_path):
-                try:
-                    from PIL import Image, ImageDraw
-                    img = Image.new("RGB", (360, 640), "#34495E")
-                    d = ImageDraw.Draw(img)
-                    d.text((130, 310), char.get("char_name", "角色"), fill="white")
-                    img.save(mobile_bg_path)
-                    update(log=f"[IMG] 已生成移动背景: {mobile_bg_path}")
-                except ImportError:
-                    pass
+        cover_path = resolve_image(
+            char.get("cover_image", ""), "cover", "#1a1a3e", (400, 300), char.get("char_name", "角色")
+        )
+        chat_bg_path = resolve_image(
+            char.get("chat_bg_image", ""), "chat_bg", "#0f1a2e", (800, 450), char.get("char_name", "角色") + " Chat"
+        )
+        mobile_bg_path = resolve_image(
+            char.get("mobile_bg_image", ""), "mobile_bg", "#0a0f1e", (360, 640), char.get("char_name", "角色")
+        )
 
         maker = CharacterMaker(email, password, headless=False, slow_mo=200)
         maker.start()
 
         try:
             # Step 1: Login
-            update(step=1, text="正在登录风月平台...", log="[Step 1/5] 登录中")
+            update(step=1, text="正在登录风月平台...", log="[Step 1/7] 登录中")
             maker.login()
             maker.create_simple()
             update(log=f"[OK] 已登录: {maker.page.url}")
 
             # Step 2: Fill basic info
-            update(step=2, text="正在填写基础信息...", log="[Step 2/5] 填写基础信息")
+            update(step=2, text="正在填写基础信息...", log="[Step 2/7] 填写基础信息")
             maker.step1_basic(
                 name=char.get("name", ""),
                 summary=char.get("summary", ""),
@@ -528,27 +690,83 @@ def run_automation(task_id):
             update(log=f"[OK] 基础信息已填写")
             maker.next_step()
 
-            # Step 3: Add character
-            update(step=3, text="正在添加角色...", log="[Step 3/5] 添加角色")
+            # Step 3: Add main character
+            update(step=3, text="正在添加主角...", log="[Step 3/7] 添加主角")
             maker.step2_add_character(
                 name=char.get("char_name", "角色"),
                 occupation=char.get("char_occupation", ""),
                 age=char.get("char_age", "18"),
                 gender=char.get("char_gender", "女"),
+                setting=char.get("char_setting", ""),
                 appearance=char.get("char_appearance", ""),
                 personality=char.get("char_personality", ""),
                 tone=char.get("char_tone", ""),
                 background=char.get("char_background", ""),
             )
-            update(log=f"[OK] 角色已添加")
+            update(log=f"[OK] 主角已添加")
+
+            # Step 3b: Add additional characters (if any)
+            extra_chars = char.get("characters", [])
+            if extra_chars:
+                added = maker.step2_add_multiple_characters(extra_chars)
+                update(log=f"[OK] 额外添加了 {added} 个角色")
+            else:
+                update(log="[OK] 无额外角色")
+
             maker.next_step()
 
-            # Step 4: Additional (skip)
-            update(step=3, log="[Step 4/5] 跳过追加设定")
+            # Step 4: Greeting (开场白) - on the same page as CG
+            greeting = char.get("greeting", "")
+            if greeting:
+                update(step=4, text="正在设置开场白...", log=f"[Step 4/8] 设置开场白")
+                maker.step3_set_greeting(greeting)
+                update(log=f"[OK] 开场白已设置")
+            else:
+                update(log="[OK] 无开场白配置，跳过")
+
+            # Step 5: CG images
+            update(step=5, text="正在处理CG图片...", log="[Step 5/8] 添加CG图片")
+            cgs = char.get("cgs", [])
+            if cgs:
+                # Map CG image names to local paths
+                cg_list = []
+                for cg in cgs:
+                    img_name = cg.get("image", "")
+                    if img_name:
+                        img_path = os.path.join(img_dir, os.path.basename(img_name))
+                        if os.path.exists(img_path):
+                            cg_list.append({"keywords": cg.get("keywords", ""), "image": img_path})
+                        else:
+                            update(log=f"[!] CG图片不存在: {img_name}")
+                    else:
+                        update(log=f"[!] CG未指定图片，跳过")
+                if cg_list:
+                    added = maker.step3_add_multiple_cg(cg_list)
+                    update(log=f"[OK] 已添加 {added} 条CG图片")
+                else:
+                    update(log="[OK] 无可用的CG图片文件")
+            else:
+                update(log="[OK] 无CG图片配置，跳过")
             maker.next_step()
 
-            # Step 5: Publish
-            update(step=4, text="正在发布角色卡...", log="[Step 5/5] 发布中")
+            # Step 6: Tags & Model (Step 4 on site: 保存与发布)
+            tags = char.get("tags", [])
+            if tags:
+                update(step=6, text="正在添加标签...", log=f"[Step 6/9] 添加标签 ({len(tags)}个)")
+                maker.step4_add_tags(tags)
+                update(log=f"[OK] 标签已添加")
+            else:
+                update(log="[OK] 无标签配置，跳过")
+
+            # Set model to deepseek-v4-flash
+            model_name = settings.get("model", "deepseek-v4-flash").replace("deepseekv4flash", "deepseek-v4-flash").replace("deepseek_v4_flash", "deepseek-v4-flash")
+            if model_name and "deepseek" in model_name.lower():
+                update(step=6, text="正在切换模型...", log=f"[Step 6/9] 切换AI模型: {model_name}")
+                maker.step4_set_model(model_name)
+                update(log=f"[OK] 模型已切换: {model_name}")
+
+            # Step 7: Publish
+            update(step=7, text="正在发布角色卡...", log="[Step 7/9] 发布中")
             anonymous = char.get("anonymous", False) if isinstance(char.get("anonymous"), bool) else default_anonymous
             maker.step4_publish(anonymous=anonymous)
             update(log=f"[OK] 已发布{'（匿名）' if anonymous else ''}: {maker.page.url}")
@@ -557,7 +775,7 @@ def run_automation(task_id):
             result_url = f"{BASE_URL}/zh/explore/installed/{char_id}" if char_id else maker.page.url
 
             update(
-                step=5,
+                step=8,
                 text="完成",
                 log="[完成] 角色卡已成功创建!",
                 done=True,

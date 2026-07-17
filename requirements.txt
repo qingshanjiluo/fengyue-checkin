@@ -1,2 +1,8 @@
-requests>=2.31.0
-playwright>=1.40.0
+flask>=3.0
+playwright>=1.40
+openai>=1.0
+Pillow>=10.0
+transformers>=4.44.0
+torch>=2.0
+accelerate>=0.30
+sentencepiece>=0.2.0

@@ -225,7 +225,7 @@ class CharacterMaker:
         """, [btn_text])
 
     def step2_add_character(self, name="小风", occupation="", age="18", gender="女",
-                            appearance="", personality="", tone="", background=""):
+                            setting="", appearance="", personality="", tone="", background=""):
         """点击 + 卡片打开弹窗，填入角色信息"""
         p = self.page
 
@@ -267,12 +267,14 @@ class CharacterMaker:
             return False
 
         # 填字段 (都带 * 必填)
+        # inputs: 姓名, 职业, 年龄, 性别
         self._js_fill_input(0, name or "小风")
         self._js_fill_input(1, occupation or "AI精灵")
         self._js_fill_input(2, age or "18")
         self._js_fill_input(3, gender or "女")
 
-        self._js_fill_textarea(0, appearance or "来自数字世界的AI精灵，拥有治愈人心的力量")
+        # textareas: 人物设定, 外貌, 性格, 语气, 背景
+        self._js_fill_textarea(0, setting or "来自数字世界的AI精灵，拥有治愈人心的力量")
         self._js_fill_textarea(1, appearance or "身高165cm，银色长发及腰，浅蓝色眼眸，身穿白色长袍")
         self._js_fill_textarea(2, personality or "温柔善良、耐心细致、乐观开朗")
         self._js_fill_textarea(3, tone or "语气温柔，说话轻声细语")
@@ -283,6 +285,32 @@ class CharacterMaker:
         p.wait_for_timeout(2000)
         print(f"[OK] add character: {name}" if ok else "[!] confirm btn not found")
         return ok
+
+    def step2_add_multiple_characters(self, characters):
+        """批量添加多个角色，characters 是 dict 列表，每个包含:
+        name, occupation, age, gender, setting, appearance, personality, tone, background
+        """
+        results = []
+        for i, ch in enumerate(characters):
+            print(f"\n[角色 {i+1}/{len(characters)}] 添加: {ch.get('name', '')}")
+            ok = self.step2_add_character(
+                name=ch.get("name", ""),
+                occupation=ch.get("occupation", ""),
+                age=ch.get("age", "18"),
+                gender=ch.get("gender", "女"),
+                setting=ch.get("setting", ""),
+                appearance=ch.get("appearance", ""),
+                personality=ch.get("personality", ""),
+                tone=ch.get("tone", ""),
+                background=ch.get("background", ""),
+            )
+            results.append(ok)
+            if not ok:
+                print(f"  [!] 角色 {i+1} 添加失败，停止继续添加")
+                break
+        ok_count = sum(1 for r in results if r)
+        print(f"[OK] 共添加 {ok_count}/{len(characters)} 个角色")
+        return ok_count
 
     def step2_fill_protagonist(self, name="", setting="", goal=""):
         """填主人公（玩家）设定"""
@@ -312,9 +340,316 @@ class CharacterMaker:
             except Exception:
                 pass
 
-    def step3_additional(self):
+    def step3_set_greeting(self, greeting_text):
+        """在Step 3设置开场白（问候语）：
+        - greeting_text: 开场白文本，最多40字
+        点击开场白区域的"添加"按钮，填入输入框后按回车确认。
+        """
         p = self.page
+        # 在开场白区域点击"添加"按钮
+        clicked = p.evaluate("""
+            () => {
+                const all = document.querySelectorAll('*');
+                let section = null;
+                for (const el of all) {
+                    if (el.offsetParent === null) continue;
+                    if (el.tagName === 'P' && el.innerText.trim() === '开场白') {
+                        // Get the outermost parent div with border
+                        let parent = el.parentElement;
+                        while (parent) {
+                            const cls = parent.className || '';
+                            if (typeof cls === 'string' && cls.includes('border') && cls.includes('rounded')) {
+                                section = parent;
+                                break;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        break;
+                    }
+                }
+                if (!section) return false;
+                const btns = section.querySelectorAll('button');
+                for (const btn of btns) {
+                    if (btn.innerText.trim() === '添加' && btn.offsetParent !== null) {
+                        btn.click();
+                        return true;
+                    }
+                }
+                return false;
+            }
+        """)
+        if not clicked:
+            print("[!] 开场白 添加 button not found")
+            return False
+        p.wait_for_timeout(1500)
+
+        # 填输入框 - find the first empty input inside the greeting section
+        filled = p.evaluate("""
+            ([greeting]) => {
+                const all = document.querySelectorAll('*');
+                let section = null;
+                for (const el of all) {
+                    if (el.offsetParent === null) continue;
+                    if (el.tagName === 'P' && el.innerText.trim() === '开场白') {
+                        let parent = el.parentElement;
+                        while (parent) {
+                            const cls = parent.className || '';
+                            if (typeof cls === 'string' && cls.includes('border') && cls.includes('rounded')) {
+                                section = parent;
+                                break;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        break;
+                    }
+                }
+                if (!section) return false;
+                const inputs = section.querySelectorAll('input');
+                for (const inp of inputs) {
+                    if (inp.offsetParent !== null && inp.value === '') {
+                        const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                        s.call(inp, greeting);
+                        inp.dispatchEvent(new Event('input', {bubbles: true}));
+                        inp.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+                        return true;
+                    }
+                }
+                return false;
+            }
+        """, [greeting_text])
+        if filled:
+            print(f"[OK] 开场白: {greeting_text[:30]}...")
+        else:
+            print("[!] 开场白 input not found")
+        p.wait_for_timeout(500)
+        return filled
+
+    def step4_set_model(self, model_name):
+        """在Step 4设置默认游玩模型：
+        - model_name: 模型名称，如 "deepseek-v4-flash"
+        """
+        p = self.page
+        # 点击 popover trigger
+        clicked = p.evaluate("""
+            () => {
+                const trigger = document.querySelector('[data-slot="popover-trigger"]');
+                if (trigger && trigger.offsetParent !== null) {
+                    trigger.click();
+                    return true;
+                }
+                return false;
+            }
+        """)
+        if not clicked:
+            print("[!] model selector trigger not found")
+            return False
+        p.wait_for_timeout(2000)
+
+        # 在弹出框中找到目标模型并点击
+        found = p.evaluate("""
+            ([name]) => {
+                const dialog = document.querySelector('[role="dialog"]');
+                if (!dialog) return false;
+                const all = dialog.querySelectorAll('*');
+                for (const el of all) {
+                    if (el.offsetParent === null) continue;
+                    const t = (el.innerText || '').trim();
+                    // Match exact model name (skip provider headers and info lines)
+                    if (t === name && el.children.length <= 1 && el.tagName !== 'svg') {
+                        el.click();
+                        return true;
+                    }
+                }
+                return false;
+            }
+        """, [model_name])
+        if found:
+            print(f"[OK] 模型已切换: {model_name}")
+        else:
+            print(f"[!] 模型未找到: {model_name}")
         p.wait_for_timeout(1000)
+        return found
+
+    def step4_add_tags(self, tags):
+        """在Step 4添加标签：
+        - tags: 标签字符串列表，如 ["可爱", "御姐", "古风"]
+        """
+        p = self.page
+        for tag in tags:
+            # 点击"添加标签"按钮
+            clicked = p.evaluate("""
+                () => {
+                    const btns = document.querySelectorAll('button');
+                    for (const btn of btns) {
+                        if (btn.offsetParent === null) continue;
+                        if (btn.innerText.trim() === '添加标签') {
+                            btn.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            """)
+            if not clicked:
+                print("[!] 添加标签 button not found")
+                return False
+            p.wait_for_timeout(1500)
+
+            # 在弹窗的搜索框中输入标签名
+            filled = p.evaluate("""
+                ([tag]) => {
+                    const all = document.querySelectorAll('input');
+                    for (const inp of all) {
+                        if (inp.offsetParent === null) continue;
+                        const pl = inp.getAttribute('placeholder') || '';
+                        if (pl.includes('搜索') || pl.includes('创建')) {
+                            const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                            s.call(inp, tag);
+                            inp.dispatchEvent(new Event('input', {bubbles: true}));
+                            inp.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            """, [tag])
+            if not filled:
+                # Try clicking the tag button directly
+                tag_found = p.evaluate("""
+                    ([tag]) => {
+                        const btns = document.querySelectorAll('button');
+                        for (const btn of btns) {
+                            if (btn.offsetParent === null) continue;
+                            const t = (btn.innerText || '').trim();
+                            if (t.startsWith(tag) && t.length < 20) {
+                                btn.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                """, [tag])
+                if tag_found:
+                    print(f"[OK] 标签已选择: {tag}")
+                else:
+                    print(f"[!] 标签未找到: {tag}")
+            else:
+                print(f"[OK] 标签已输入: {tag}")
+                p.wait_for_timeout(1000)
+                # Try to click the matching tag button that appears after typing
+                tag_found = p.evaluate("""
+                    ([tag]) => {
+                        const btns = document.querySelectorAll('button');
+                        for (const btn of btns) {
+                            if (btn.offsetParent === null) continue;
+                            const t = (btn.innerText || '').trim();
+                            if (t.startsWith(tag) && t.length < 20) {
+                                btn.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                """, [tag])
+                if tag_found:
+                    print(f"[OK] 标签已匹配: {tag}")
+
+            # Click 保存
+            p.evaluate("""
+                () => {
+                    const btns = document.querySelectorAll('button');
+                    for (const btn of btns) {
+                        if (btn.offsetParent === null) continue;
+                        if (btn.innerText.trim() === '保存' && btn.offsetParent !== null) {
+                            btn.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            """)
+            p.wait_for_timeout(1000)
+        return True
+
+    def step3_add_cg(self, keywords, image_path):
+        """在Step 3新增一条CG图片条目：
+        - keywords: 触发关键词，多个用逗号分隔
+        - image_path: 本地图片路径
+        """
+        p = self.page
+
+        # 点击 新增
+        try:
+            new_btn = p.locator("button").filter(has_text="新增").first
+            if not new_btn.is_visible():
+                print("[!] 新增 button not found")
+                return False
+            new_btn.scroll_into_view_if_needed()
+            p.wait_for_timeout(500)
+            new_btn.click(force=True)
+            p.wait_for_timeout(2000)
+        except Exception as e:
+            print(f"[!] 点击新增失败: {e}")
+            return False
+
+        # 填关键词 (tag-style input: type keyword, press Enter to add as tag)
+        filled = p.evaluate("""
+            ([kw]) => {
+                const all = document.querySelectorAll('input');
+                for (const el of all) {
+                    if (el.offsetParent === null) continue;
+                    const pl = el.getAttribute('placeholder') || '';
+                    if (pl.includes('触发关键词') || pl.includes('填写触发关键词')) {
+                        const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                        s.call(el, kw);
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+                        return true;
+                    }
+                }
+                return false;
+            }
+        """, [keywords])
+        if not filled:
+            print("[!] keyword input not found")
+        else:
+            print(f"[OK] keywords: {keywords}")
+        p.wait_for_timeout(1000)
+
+        # 上传图片
+        if image_path and os.path.exists(image_path):
+            try:
+                file_input = p.locator('input[type="file"]').last
+                if file_input.is_visible():
+                    file_input.set_input_files(image_path)
+                    p.wait_for_timeout(2000)
+                    print(f"[OK] upload CG: {os.path.basename(image_path)}")
+                    return True
+            except Exception as e:
+                print(f"[!] CG upload failed: {e}")
+                return False
+        else:
+            print(f"[!] image not found: {image_path}")
+            return False
+        return True
+
+    def step3_add_multiple_cg(self, cg_list):
+        """批量添加CG图片，cg_list 是 dict 列表，每个包含:
+        keywords: 触发关键词
+        image: 图片路径
+        """
+        results = []
+        for i, cg in enumerate(cg_list):
+            kw = cg.get("keywords", "")
+            img = cg.get("image", "")
+            if not kw and not img:
+                continue
+            print(f"\n[CG {i+1}/{len(cg_list)}] {kw} -> {os.path.basename(img) if img else 'no image'}")
+            ok = self.step3_add_cg(keywords=kw, image_path=img)
+            results.append(ok)
+        ok_count = sum(1 for r in results if r)
+        print(f"[OK] 共添加 {ok_count}/{len(cg_list)} 条CG")
+        return ok_count
 
     def step4_publish(self, anonymous=False):
         p = self.page
@@ -451,7 +786,7 @@ def main():
         maker.screenshot("D:\\Temp\\opencode\\step2.png")
         maker.next_step()
 
-        maker.step3_additional()
+        # step3: CG图片由AI自动添加，命令行模式跳过
         maker.screenshot("D:\\Temp\\opencode\\step3.png")
         maker.next_step()
 

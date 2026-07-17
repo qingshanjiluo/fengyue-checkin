@@ -1,0 +1,57 @@
+name: AI 角色卡自动创建
+
+on:
+  workflow_dispatch:         # 手动触发
+    inputs:
+      prompt:
+        description: '角色描述（自然语言）'
+        required: true
+        default: '创建一个古风少女角色，温柔善良，擅长医术'
+      email:
+        description: '风月账号邮箱（留空用 Secrets）'
+        required: false
+      password:
+        description: '风月账号密码（留空用 Secrets）'
+        required: false
+
+  schedule:
+    - cron: '0 10 * * 1'     # 每周一早 10 点自动跑（可改）
+
+jobs:
+  create-character:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+
+      - name: AI 生成并发布角色卡
+        env:
+          FY_EMAIL: ${{ inputs.email || secrets.FY_EMAIL }}
+          FY_PASSWORD: ${{ inputs.password || secrets.FY_PASSWORD }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_URL: ${{ secrets.AI_API_URL || 'https://api.xiaomimimo.com/v1' }}
+          AI_MODEL: ${{ secrets.AI_MODEL || 'deepseek-v4-flash' }}
+        run: |
+          python scripts/ai_runner.py --prompt "${{ inputs.prompt }}"
+
+      - name: 上传截图（调试用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: /tmp/step*.png
+          retention-days: 3
