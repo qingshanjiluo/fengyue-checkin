@@ -27,35 +27,46 @@ tasks_lock = threading.Lock()
 hotlist_cache = {"data": None, "time": 0, "ranking": None}
 hotlist_cache_lock = threading.Lock()
 
-# ── 热榜专用线程（Playwright 非线程安全，所有操作在同一个线程执行）──
+# ── 热榜专用线程 ──
 import queue as _queue
 _hotlist_req_q = _queue.Queue()
 _hotlist_resp_q = _queue.Queue()
+_hotlist_worker_alive = False
 
 def _hotlist_worker():
-    from playwright.sync_api import sync_playwright
-    p = sync_playwright().start()
-    browser = p.chromium.launch(headless=True, slow_mo=100)
+    global _hotlist_worker_alive
+    try:
+        from playwright.sync_api import sync_playwright
+        p = sync_playwright().start()
+        browser = p.chromium.launch(headless=True, slow_mo=100)
+        _hotlist_worker_alive = True
+        print("[HOTLIST] Worker thread started")
+    except Exception as e:
+        print(f"[HOTLIST] Browser launch failed: {e}")
+        _hotlist_resp_q.put(Exception(f"浏览器启动失败: {e}"))
+        return
+
     while True:
-        req = _hotlist_req_q.get()
-        if req is None:
-            break
-        ranking, settings = req
         try:
+            req = _hotlist_req_q.get()
+            if req is None:
+                break
+            ranking, settings = req
             ctx = browser.new_context(viewport={"width": 1280, "height": 900})
             page = ctx.new_page()
-            page.goto(f"{BASE_URL}/zh/signin")
-            page.wait_for_load_state("networkidle")
+            page.goto(f"{BASE_URL}/zh/signin", wait_until="networkidle", timeout=20000)
             if settings.get("email"):
                 page.locator('input[type="email"]').first.fill(settings.get("email", ""))
                 page.locator('input[type="password"]').first.fill(settings.get("password", ""))
                 page.keyboard.press("Enter")
-                page.wait_for_load_state("networkidle")
+                page.wait_for_load_state("networkidle", timeout=15000)
                 page.wait_for_timeout(2000)
             cards = fetch_ranking(page, ranking)
             ctx.close()
             _hotlist_resp_q.put(cards)
+            print(f"[HOTLIST] Fetched {len(cards) if cards else 0} cards for {ranking}")
         except Exception as e:
+            print(f"[HOTLIST] Error: {e}")
             _hotlist_resp_q.put(e)
 
 threading.Thread(target=_hotlist_worker, daemon=True).start()
@@ -184,17 +195,25 @@ def api_hotlist():
     ranking = request.args.get("ranking", "weekly")
     refresh = request.args.get("refresh", "0") == "1"
 
+    # Check worker health
+    if not _hotlist_worker_alive:
+        return jsonify({"ok": False, "error": "热榜服务未就绪（浏览器未启动），请稍后重试"}), 503
+
     with hotlist_cache_lock:
         if not refresh and hotlist_cache["data"] and hotlist_cache["ranking"] == ranking and (time.time() - hotlist_cache["time"]) < 120:
             return jsonify({"ok": True, "ranking": ranking, "items": hotlist_cache["data"], "cached": True})
 
-    # Send request to dedicated thread
+    # Drain stale response from previous failed attempt
+    while not _hotlist_resp_q.empty():
+        try: _hotlist_resp_q.get_nowait()
+        except: break
+
     settings = load_settings()
     _hotlist_req_q.put((ranking, settings))
     try:
-        result = _hotlist_resp_q.get(timeout=30)
+        result = _hotlist_resp_q.get(timeout=45)
     except _queue.Empty:
-        return jsonify({"ok": False, "error": "热榜请求超时"}), 504
+        return jsonify({"ok": False, "error": "热榜请求超时（浏览器可能卡死）"}), 504
 
     if isinstance(result, Exception):
         return jsonify({"ok": False, "error": str(result)}), 500
