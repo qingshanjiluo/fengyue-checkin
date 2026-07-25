@@ -1,0 +1,52 @@
+[
+  {
+    "name": "locale",
+    "value": "zh-Hans",
+    "domain": "aiaha.xyz",
+    "path": "/",
+    "expires": 1816412745.19873,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "x-domain",
+    "value": "aiaha.xyz",
+    "domain": "aiaha.xyz",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "x-hostname",
+    "value": "aiaha.xyz",
+    "domain": "aiaha.xyz",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "x-default-title",
+    "value": "AI%E9%A3%8E%E6%9C%88",
+    "domain": "aiaha.xyz",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_cfuvid",
+    "value": "mE1YXkuxQ0lDxFBsQCBVhfiAc_I5odmQraCtnR8mxJQ-1784876732.8343387-1.0.1.1-N.sBBjdBOJErm2KtequNwXVlYGGY.g5VVYNXdHr2Ax4",
+    "domain": ".catai.wiki",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  }
+]
