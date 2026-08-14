@@ -1,0 +1,35 @@
+name: AI风月 自动抽奖
+
+on:
+  workflow_dispatch:              # 手动触发
+  schedule:
+    - cron: '5 0 * * *'          # 每天 UTC 00:05 (北京时间 08:05) 自动执行
+
+jobs:
+  lottery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 执行签到 + 抽奖
+        env:
+          BOT_ACCOUNTS: ${{ secrets.BOT_ACCOUNTS }}
+          BOT_PROXY: ${{ secrets.BOT_PROXY }}
+        run: |
+          python scripts/lottery_ci.py
+
+      - name: 上传失败账号记录
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lottery-records
+          path: failed_accounts.txt
+          retention-days: 7
