@@ -86,10 +86,22 @@ export default {
         return err(4001, '参数错误');
       const salt = randomSalt();
       const ph = await hashPassword(b.password, salt);
+      // 邀请码: 校验存在则登记邀请关系
+      let inviterId = null;
+      if (b.invite_code) {
+        const ic = await DB.prepare('SELECT user_id FROM invite_codes WHERE code=?').bind(String(b.invite_code).trim()).first();
+        if (ic) inviterId = ic.user_id;
+      }
+      const code = randCode();
       try {
         const r = await DB.prepare('INSERT INTO users(username,password_hash,role) VALUES(?,?,?)')
           .bind(b.username, `${salt}:${ph}`, 'user').run();
-        return ok({ id: r.meta.last_row_id });
+        const uid = r.meta.last_row_id;
+        await DB.prepare('INSERT OR IGNORE INTO invite_codes(user_id,code) VALUES(?,?)').bind(uid, code).run();
+        if (inviterId) {
+          await DB.prepare('INSERT INTO invite_relations(inviter_id,invitee_id) VALUES(?,?)').bind(inviterId, uid).run();
+        }
+        return ok({ id: uid });
       } catch { return err(4002, '用户名已存在'); }
     }
     if (p === '/api/auth/login' && method === 'POST') {
@@ -205,6 +217,19 @@ export default {
       const u = await DB.prepare('SELECT id,username,balance,role FROM users WHERE id=?').bind(auth.uid).first();
       const tx = await DB.prepare('SELECT * FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT 50').bind(auth.uid).all();
       return ok({ balance: u.balance, user: u, transactions: tx.results });
+    }
+
+    // 邀请码 (登录)
+    if (p === '/api/invite/code' && method === 'GET') {
+      if (!auth) return err(4010, '未登录', 401);
+      let ic = await DB.prepare('SELECT code FROM invite_codes WHERE user_id=?').bind(auth.uid).first();
+      if (!ic) {
+        const code = randCode();
+        await DB.prepare('INSERT OR IGNORE INTO invite_codes(user_id,code) VALUES(?,?)').bind(auth.uid, code).run();
+        ic = await DB.prepare('SELECT code FROM invite_codes WHERE user_id=?').bind(auth.uid).first();
+      }
+      const invited = await DB.prepare('SELECT COUNT(*) n FROM invite_relations WHERE inviter_id=?').bind(auth.uid).first();
+      return ok({ invite_code: ic.code, invited: invited.n || 0 });
     }
 
     // 购买账号

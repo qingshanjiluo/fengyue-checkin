@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -125,6 +125,14 @@ async function api(method, path, body) {
 const PLATFORM_LABELS = { aimagnet: '春水酒馆', fengyue: '风月酒馆', missai: '密丝AI', dzmm: 'DZMM' };
 const PLATFORM_UNITS = { aimagnet: '花瓣', fengyue: '积分', missai: '体验点', dzmm: '积分' };
 const CONV_RATE = 1000;   // 花瓣/积分 -> 代币 汇率
+const QQ_GROUP = '醉翁亭充值群';   // 充值群提示, 阶段2改为 settings 配置
+const RECHARGE_PACKAGES = [       // 充值套餐: rmb = 人民币金额, bonus = 赠送代币
+  { rmb: 10, bonus: 0 },
+  { rmb: 30, bonus: 20 },
+  { rmb: 50, bonus: 50 },
+  { rmb: 100, bonus: 120 },
+  { rmb: 200, bonus: 300 },
+];
 const fmt = (n) => (Number(n) || 0).toLocaleString('zh-CN');
 const fmtTime = (u) => {
   if (!u) return '—';
@@ -202,9 +210,14 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
   const isAdmin = user && user.role === 'admin';
   const navItems = [
     { id: 'home', label: '首页' },
-    { id: 'list', label: '春水雅集' },
-    { id: 'wallet', label: '货栈' },
-    ...(isAdmin ? [{ id: 'chlogs', label: '渠道报错' }, { id: 'pool', label: '号池监看' }] : []),
+    { id: 'market', label: '账号市场' },
+    { id: 'scripts', label: '脚本皮肤' },
+    { id: 'players', label: '玩家市场' },
+    { id: 'chat', label: '聊天室' },
+    { id: 'me', label: '用户中心' },
+    { id: 'recharge', label: '充值' },
+    { id: 'invite', label: '邀请' },
+    ...(isAdmin ? [{ id: 'pool', label: '号池监看' }, { id: 'chlogs', label: '渠道报错' }, { id: 'admin-channels', label: '渠道管理' }, { id: 'admin-notices', label: '通知管理' }, { id: 'admin-settings', label: '系统设置' }] : []),
   ];
   return (
     <nav className="sticky top-0 z-50 bg-rice/80 backdrop-blur-md border-b border-tea-border">
@@ -217,17 +230,17 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
           <span className="font-brush text-2xl text-ink tracking-widest group-hover:text-amber transition-colors duration-500">醉翁亭</span>
         </button>
 
-        <div className="hidden md:flex items-center gap-10">
+        <div className="hidden lg:flex items-center gap-4">
           {navItems.map(item => (
             <button key={item.id} onClick={() => setPage(item.id)}
-              className={`relative font-serif text-sm tracking-widest transition-colors duration-300 ${currentPage === item.id ? 'text-amber' : 'text-ink-light hover:text-ink'}`}>
+              className={`relative font-serif text-[13px] tracking-widest transition-colors duration-300 whitespace-nowrap ${currentPage === item.id ? 'text-amber' : 'text-ink-light hover:text-ink'}`}>
               {item.label}
               {currentPage === item.id && <span className="absolute -bottom-1 left-0 w-full h-px bg-amber/60" />}
             </button>
           ))}
         </div>
 
-        <div className="hidden md:flex items-center gap-5">
+        <div className="hidden lg:flex items-center gap-5">
           {user ? (
             <>
               <span className="font-serif text-sm text-ink-light flex items-center gap-1.5">
@@ -245,14 +258,14 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
           )}
         </div>
 
-        <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)}>
+        <button className="lg:hidden p-2" onClick={() => setMenuOpen(!menuOpen)}>
           <div className="w-5 h-px bg-ink mb-1.5"></div>
           <div className="w-5 h-px bg-ink mb-1.5"></div>
           <div className="w-5 h-px bg-ink"></div>
         </button>
       </div>
       {menuOpen && (
-        <div className="md:hidden border-t border-tea-border bg-rice/95 px-6 py-4 space-y-4 ink-fade">
+        <div className="lg:hidden border-t border-tea-border bg-rice/95 px-6 py-4 space-y-4 ink-fade">
           {navItems.map(item => (
             <button key={item.id} onClick={() => { setPage(item.id); setMenuOpen(false); }}
               className={`block w-full text-left font-serif text-base tracking-widest py-2 ${currentPage === item.id ? 'text-amber' : 'text-ink-light'}`}>
@@ -333,11 +346,20 @@ const LoginPage = ({ onAuthed }) => {
 const HomePage = ({ setPage, user }) => {
   const [stats, setStats] = useState(null);
   const [chlogs, setChlogs] = useState([]);
+  const [notices, setNotices] = useState([]);
+  const [nIdx, setNIdx] = useState(0);
 
   useEffect(() => {
     api('GET', '/api/stats').then(d => setStats(d)).catch(() => {});
     api('GET', '/api/channel-logs').then(d => setChlogs(d.platforms || [])).catch(() => {});
+    api('GET', '/api/notifications').then(d => setNotices(d.notifications || [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (notices.length < 2) return;
+    const t = setInterval(() => setNIdx(i => (i + 1) % notices.length), 4000);
+    return () => clearInterval(t);
+  }, [notices.length]);
 
   const catLabel = { register: '注册', daily: '签到', login: '登录' };
 
@@ -377,19 +399,19 @@ const HomePage = ({ setPage, user }) => {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-3xl mx-auto">
-            <button onClick={() => setPage('list')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1s',opacity:0}}>
+            <button onClick={() => setPage('market')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1s',opacity:0}}>
               <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
                 <IconScroll className="w-7 h-7 text-ink-light group-hover:text-amber transition-colors duration-500" />
               </div>
-              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">春水雅集</h3>
-              <p className="font-serif text-sm text-ink-light tracking-widest">以代币购养好的春水号</p>
+              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">账号市场</h3>
+              <p className="font-serif text-sm text-ink-light tracking-widest">以代币购养好的各渠道号</p>
             </button>
-            <button onClick={() => setPage('wallet')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1.2s',opacity:0}}>
+            <button onClick={() => setPage('me')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1.2s',opacity:0}}>
               <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
                 <IconBox className="w-7 h-7 text-ink-light group-hover:text-amber transition-colors duration-500" />
               </div>
-              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">货栈</h3>
-              <p className="font-serif text-sm text-ink-light tracking-widest">余钱、流水与我购得的号</p>
+              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">用户中心</h3>
+              <p className="font-serif text-sm text-ink-light tracking-widest">余钱、账号与流水</p>
             </button>
             <button onClick={() => setPage('login')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1.4s',opacity:0}}>
               <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
@@ -403,6 +425,34 @@ const HomePage = ({ setPage, user }) => {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 pb-16 -mt-8 relative z-10 space-y-12">
+        {/* 公告滚动栏 */}
+        {notices.length > 0 && (
+          <div className="card-deckle bg-ink text-rice p-4 overflow-hidden">
+            <div className="flex items-center gap-4">
+              <span className="px-2 py-0.5 text-xs font-serif bg-cinnabar text-white shrink-0 tracking-widest">公告</span>
+              <div className="flex-1 overflow-hidden">
+                {(() => {
+                  const n = notices[nIdx] || notices[0];
+                  return (
+                    <div key={n && n.id} className="ink-fade whitespace-nowrap overflow-hidden text-ellipsis">
+                      <span className="font-serif text-sm text-rice/90 mr-3">{n.title}</span>
+                      <span className="font-serif text-sm text-rice/50">{n.content}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+              {notices.length > 1 && (
+                <div className="flex gap-1 shrink-0">
+                  {notices.map((_, i) => (
+                    <button key={i} onClick={() => setNIdx(i)}
+                      className={`w-2 h-2 rounded-full transition-colors ${i === nIdx ? 'bg-amber' : 'bg-rice/20'}`} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 号池一览 */}
         {stats && (
           <div className="page-enter">
@@ -970,6 +1020,503 @@ const ChannelLogsAdminPage = () => {
   );
 };
 
+/* ==================== 账号市场 ==================== */
+const MarketPage = ({ setPage, user, onBuy }) => {
+  const [products, setProducts] = useState([]);
+  const [plat, setPlat] = useState('');
+  const [err, setErr] = useState('');
+  const [buyTarget, setBuyTarget] = useState(null);
+  const [delivered, setDelivered] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [seal, setSeal] = useState(null);
+
+  const load = () => api('GET', '/api/products').then(d => setProducts(d.products || [])).catch(e => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  useEffect(() => { if (delivered) onBuy(); }, [delivered]);
+
+  const list = plat ? products.filter(p => p.platform === plat) : products;
+
+  const doBuy = async () => {
+    if (!user) { setPage('login'); return; }
+    setBusy(true); setErr('');
+    try {
+      const d = await api('POST', '/api/orders', { account_id: Number(buyTarget.id) });
+      setDelivered(d.account);
+      setSeal('已收');
+      setBuyTarget(null);
+      load();
+    } catch (e) {
+      setErr(e.message);
+      if (e.message.includes('代币')) setBuyTarget(null);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-10">
+        <div>
+          <h2 className="font-brush text-4xl text-ink mb-2">账号市场</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">各渠道每日签到照养的号，以代币购得</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <select value={plat} onChange={e => setPlat(e.target.value)} className="input-scroll px-4 py-2.5 font-serif">
+            <option value="">全部平台</option>
+            {Object.entries(PLATFORM_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          {user && (
+            <span className="flex items-center gap-1.5 font-serif text-sm text-ink-light">
+              <IconCoin className="w-4 h-4 text-amber" />{fmt(user.balance)} 代币
+            </span>
+          )}
+        </div>
+      </div>
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
+      {!err && list.length === 0 && (
+        <div className="text-center py-20">
+          <IconScroll className="w-16 h-16 text-ink-light/20 mx-auto mb-4" />
+          <p className="font-serif text-ink-light tracking-widest">暂无在售账号，稍后再来</p>
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {list.map((p, i) => (
+          <div key={p.id} className="card-deckle bg-white/50 border border-tea-border p-6 group ink-fade" style={{ animationDelay: `${i * 0.08}s`, opacity: 0 }}>
+            <div className="flex items-start justify-between mb-4">
+              <span className="px-2.5 py-1 text-xs font-serif border border-amber/40 text-amber bg-amber/5">{PLATFORM_LABELS[p.platform] || p.platform}</span>
+              <span className="text-xs text-ink-light font-serif">#{p.id}</span>
+            </div>
+            <h3 className="font-serif text-lg text-ink mb-1 truncate">{p.nickname}</h3>
+            <p className="text-xs text-ink-light font-serif mb-4">{(PLATFORM_UNITS[p.platform] || '积分')} {fmt(p.petals)} · 入亭于 {fmtTime(p.registered_at)}</p>
+            <div className="flex items-center justify-between">
+              <span className="font-lora text-xl font-semibold text-cinnabar">{fmt(p.price)} 代币</span>
+              <button onClick={() => setBuyTarget(p)} className="px-4 py-2 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 transition-colors">购取</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {buyTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4" onClick={() => setBuyTarget(null)}>
+          <div className="bg-rice border border-tea-border max-w-sm w-full p-8" onClick={e => e.stopPropagation()}>
+            <h3 className="font-brush text-2xl text-ink mb-4">确认购取</h3>
+            <p className="font-serif text-sm text-ink-light mb-1">{buyTarget.nickname} · {PLATFORM_LABELS[buyTarget.platform] || buyTarget.platform}</p>
+            <p className="font-lora text-2xl text-cinnabar mb-2">{fmt(buyTarget.price)} 代币</p>
+            {user ? (
+              <p className="font-serif text-xs text-ink-light mb-6">余钱 {fmt(user.balance)} 代币</p>
+            ) : (
+              <p className="font-serif text-xs text-ink-light mb-6">尚未登栈，将跳转登栈</p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setBuyTarget(null)} className="flex-1 py-2.5 border border-tea-border font-serif text-sm text-ink-light hover:text-ink">再想想</button>
+              <button onClick={doBuy} disabled={busy} className="flex-1 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60">{busy ? '办理中...' : (user ? '确认购取' : '去登栈')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {delivered && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4">
+          <div className="bg-rice border border-tea-border max-w-md w-full p-8">
+            <p className="font-brush text-3xl text-ink mb-2 text-center">号已交付</p>
+            <p className="font-serif text-sm text-ink-light text-center tracking-widest mb-8">请记下登录信物，妥善保管</p>
+            <div className="bg-bamboo/40 border border-tea-border p-6 space-y-3 text-left mb-6">
+              <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">昵称</span><span className="font-serif text-ink break-all text-right">{delivered.nickname}</span></div>
+              <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">账号</span><span className="font-serif text-ink break-all text-right">{delivered.email}</span></div>
+              <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">密语</span><span className="font-serif text-ink break-all text-right">{delivered.password}</span></div>
+              <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">积分</span><span className="font-lora text-ink">{fmt(delivered.petals)}</span></div>
+            </div>
+            <button onClick={() => { setDelivered(null); }} className="w-full py-2.5 bg-amber text-white font-serif tracking-widest hover:bg-amber/90">收讫</button>
+          </div>
+        </div>
+      )}
+
+      <SealStamp text={seal} show={!!seal} onDone={() => setSeal(null)} />
+    </div>
+  );
+};
+
+/* ==================== 用户中心 ==================== */
+const MePage = ({ user, setPage }) => {
+  const [wallet, setWallet] = useState(null);
+  const [mine, setMine] = useState([]);
+  const [err, setErr] = useState('');
+  const [expand, setExpand] = useState(null);
+  const TYPE = { charge: '充值', buy: '购号', admin: '管理调整' };
+
+  useEffect(() => {
+    if (!user) return;
+    api('GET', '/api/wallet').then(setWallet).catch(e => setErr(e.message));
+    api('GET', '/api/accounts/mine').then(d => setMine(d.accounts || [])).catch(() => {});
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="page-enter max-w-md mx-auto px-6 py-20 text-center">
+        <p className="font-serif text-ink-light tracking-widest mb-6">未持信物，无法开启用户中心</p>
+        <button onClick={() => setPage('login')} className="px-8 py-2.5 bg-amber text-white font-serif tracking-widest">去登栈</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10 space-y-10">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="font-brush text-4xl text-ink mb-2">用户中心</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">余钱、账号与流水</p>
+        </div>
+        <button onClick={() => setPage('recharge')} className="px-5 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">去充值</button>
+      </div>
+      {err && <p className="font-serif text-sm text-cinnabar">{err}</p>}
+
+      {wallet && (
+        <div className="card-deckle bg-white/50 border border-tea-border p-6 flex items-center justify-between">
+          <div>
+            <p className="font-serif text-ink">{wallet.user.username}</p>
+            <p className="font-serif text-xs text-ink-light mt-1 tracking-widest">{wallet.user.role === 'admin' ? '管理员' : '亭中客'} · ID {wallet.user.id}</p>
+          </div>
+          <div className="text-right">
+            <p className="font-lora text-3xl font-semibold text-cinnabar">{fmt(wallet.balance)}</p>
+            <p className="font-serif text-xs text-ink-light tracking-widest">代币余额</p>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h3 className="font-brush text-2xl text-ink mb-4">我的账号</h3>
+        {mine.length === 0 ? (
+          <div className="card-deckle bg-white/30 border border-tea-border p-8 text-center font-serif text-sm text-ink-light">尚未购得账号</div>
+        ) : (
+          <div className="space-y-3">
+            {mine.map(a => (
+              <div key={a.id} className="card-deckle bg-white/40 border border-tea-border p-5">
+                <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpand(expand === a.id ? null : a.id)}>
+                  <div>
+                    <p className="font-serif text-ink">{a.nickname}</p>
+                    <p className="font-serif text-xs text-ink-light mt-1">{(PLATFORM_LABELS[a.platform] || a.platform)} · {(PLATFORM_UNITS[a.platform] || '积分')} {fmt(a.petals)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-lora text-amber">{fmt(a.price)} 代币</p>
+                    <p className="font-serif text-xs text-ink-light">上次签到 {a.last_sign_date || '—'}</p>
+                  </div>
+                </div>
+                {expand === a.id && (
+                  <div className="mt-4 bg-bamboo/40 border border-tea-border p-4 space-y-2">
+                    <div className="flex justify-between"><span className="text-xs text-ink-light font-serif">账号</span><span className="text-sm font-serif text-ink break-all text-right">{a.email}</span></div>
+                    <div className="flex justify-between"><span className="text-xs text-ink-light font-serif">密语</span><span className="text-sm font-serif text-ink break-all text-right">{a.password}</span></div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="font-brush text-2xl text-ink mb-4">交易流水</h3>
+        {wallet && wallet.transactions.length === 0 ? (
+          <div className="card-deckle bg-white/30 border border-tea-border p-8 text-center font-serif text-sm text-ink-light">暂无流水</div>
+        ) : (
+          <div className="bg-white/30 border border-tea-border overflow-x-auto">
+            <table className="w-full text-sm font-serif">
+              <thead>
+                <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+                  <th className="px-4 py-3 text-left">类型</th>
+                  <th className="px-4 py-3 text-right">金额</th>
+                  <th className="px-4 py-3 text-left">备注</th>
+                  <th className="px-4 py-3 text-right">时间</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-tea-border/50">
+                {wallet && wallet.transactions.map(t => (
+                  <tr key={t.id}>
+                    <td className="px-4 py-3">{TYPE[t.type] || t.type}</td>
+                    <td className={`px-4 py-3 text-right font-lora ${t.amount > 0 ? 'text-amber' : 'text-ink'}`}>{t.amount > 0 ? '+' : ''}{fmt(t.amount)}</td>
+                    <td className="px-4 py-3 text-ink-light">{t.note || '—'}</td>
+                    <td className="px-4 py-3 text-right text-ink-light">{fmtTime(t.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 充值 ==================== */
+const RechargePage = ({ user, setPage }) => {
+  const [rate, setRate] = useState(100);
+  const [copied, setCopied] = useState('');
+
+  useEffect(() => { api('GET', '/api/stats').then(d => setRate(d.token_per_rmb || 100)).catch(() => {}); }, []);
+
+  const note = (pkg) => `[充值] 醉翁亭 用户ID ${user ? user.id : '?'} (${user ? user.username : ''})，购买 ${pkg.rmb} 元套餐，应到账 ${pkg.rmb * rate + pkg.bonus} 代币`;
+  const copy = (pkg) => {
+    navigator.clipboard.writeText(note(pkg)).then(() => { setCopied(String(pkg.rmb)); setTimeout(() => setCopied(''), 2000); }).catch(() => {});
+  };
+
+  if (!user) {
+    return (
+      <div className="page-enter max-w-md mx-auto px-6 py-20 text-center">
+        <p className="font-serif text-ink-light tracking-widest mb-6">请先登栈再进行充值</p>
+        <button onClick={() => setPage('login')} className="px-8 py-2.5 bg-amber text-white font-serif tracking-widest">去登栈</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-enter max-w-4xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-2">充值</h2>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">1 元 = {rate} 代币，付款后联系 {QQ_GROUP} 管理员审核到账</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        {RECHARGE_PACKAGES.map(pkg => (
+          <div key={pkg.rmb} className="card-deckle bg-white/50 border border-tea-border p-6 text-center group">
+            <p className="font-lora text-3xl font-semibold text-ink">{pkg.rmb} 元</p>
+            <p className="font-lora text-lg text-amber my-3">{fmt(pkg.rmb * rate + pkg.bonus)} 代币</p>
+            {pkg.bonus > 0 && <p className="font-serif text-xs text-cinnabar mb-3">附赠 {pkg.bonus} 代币</p>}
+            {pkg.bonus === 0 && <p className="font-serif text-xs text-ink-light/40 mb-3">无附赠</p>}
+            <button onClick={() => copy(pkg)} className="w-full py-2.5 border border-tea-border font-serif text-sm text-ink-light hover:border-amber hover:text-amber transition-colors">
+              {copied === String(pkg.rmb) ? '已复制备注' : '复制充值备注'}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="card-deckle bg-white/40 border border-tea-border p-6">
+        <h3 className="font-serif text-ink mb-3">充值流程</h3>
+        <ol className="font-serif text-sm text-ink-light space-y-2 list-decimal list-inside">
+          <li>选择套餐，点击"复制充值备注"</li>
+          <li>向 {QQ_GROUP} 群内管理员付款并粘贴备注</li>
+          <li>管理员审核后，代币自动到账（可在用户中心查看流水）</li>
+        </ol>
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 邀请 ==================== */
+const InvitePage = ({ user }) => {
+  const [code, setCode] = useState('');
+  const [invited, setInvited] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api('GET', '/api/invite/code').then(d => { setCode(d.invite_code); setInvited(d.invited || 0); }).catch(() => {});
+  }, []);
+
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
+  };
+
+  return (
+    <div className="page-enter max-w-3xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-2">邀请</h2>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">分享邀请码，让更多朋友入亭</p>
+
+      <div className="card-deckle bg-white/50 border border-tea-border p-8 text-center mb-8">
+        <p className="font-serif text-sm text-ink-light mb-3 tracking-widest">你的邀请码</p>
+        <p className="font-lora text-4xl font-semibold text-amber tracking-[0.3em] mb-6">{code || '···'}</p>
+        <div className="flex justify-center gap-3">
+          <button onClick={copy} className="px-8 py-2.5 bg-amber text-white font-serif tracking-widest hover:bg-amber/90">{copied ? '已复制' : '复制邀请码'}</button>
+        </div>
+        <p className="font-serif text-xs text-ink-light mt-6">已邀请 {invited} 位亭中客</p>
+      </div>
+
+      <div className="card-deckle bg-white/40 border border-tea-border p-6">
+        <h3 className="font-serif text-ink mb-3">邀请奖励</h3>
+        <p className="font-serif text-sm text-ink-light leading-relaxed">
+          新用户注册时填写你的邀请码，双方均可获得代币奖励（规则以运营公告为准）。奖励在对方完成首次签到后发放。
+        </p>
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 占位页 ==================== */
+const PlaceholderPage = ({ title, desc }) => (
+  <div className="page-enter max-w-2xl mx-auto px-6 py-24 text-center">
+    <IconWine className="w-16 h-16 text-ink-light/20 mx-auto mb-6" />
+    <h2 className="font-brush text-4xl text-ink mb-3">{title}</h2>
+    <p className="font-serif text-sm text-ink-light tracking-widest mb-8">{desc}</p>
+    <p className="font-serif text-xs text-ink-light/40">此馆尚在营造，敬请期待</p>
+  </div>
+);
+
+/* ==================== 渠道管理 (admin) ==================== */
+const ChannelsAdminPage = () => {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = () => api('GET', '/api/admin/channels').then(d => setRows(d.channels || [])).catch(e => setMsg(e.message));
+  useEffect(() => { load(); }, []);
+
+  const save = async (r) => {
+    setMsg('');
+    try {
+      const d = await api('PATCH', `/api/admin/channels/${r.platform}`, {
+        enabled: r.enabled ? 1 : 0, min_petals: Number(r.min_petals), unit: Number(r.unit),
+        price_per_unit: Number(r.price_per_unit), max_on_sale: Number(r.max_on_sale),
+      });
+      setMsg('渠道配置已保存');
+      load();
+    } catch (e) { setMsg(e.message); }
+  };
+
+  const refresh = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const d = await api('POST', '/api/admin/channels/refresh', {});
+      setMsg(`全池重新评估完成，本次上架 ${d.listed} 个账号`);
+      load();
+    } catch (e) { setMsg(e.message); }
+    setBusy(false);
+  };
+
+  const set = (i, k, v) => { const n = rows.slice(); n[i] = { ...n[i], [k]: v }; setRows(n); };
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+          <h2 className="font-brush text-4xl text-ink mb-2">渠道管理</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">各平台售卖开关与自动上架规则（price = petals/unit x price_per_unit）</p>
+        </div>
+        <button onClick={refresh} disabled={busy} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60">{busy ? '评估中...' : '全池重新评估上架'}</button>
+      </div>
+      {msg && <p className="font-serif text-sm text-ink mb-6">{msg}</p>}
+      <div className="bg-white/30 border border-tea-border overflow-x-auto">
+        <table className="w-full text-sm font-serif">
+          <thead>
+            <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+              <th className="px-4 py-3 text-left">平台</th>
+              <th className="px-4 py-3 text-center">启用</th>
+              <th className="px-4 py-3 text-right">准入积分</th>
+              <th className="px-4 py-3 text-right">定价单位</th>
+              <th className="px-4 py-3 text-right">每单位售价</th>
+              <th className="px-4 py-3 text-right">上架上限</th>
+              <th className="px-4 py-3 text-center">已上架/账号数</th>
+              <th className="px-4 py-3 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-tea-border/50">
+            {rows.map((r, i) => (
+              <tr key={r.platform} className="hover:bg-white/20 transition-colors align-middle">
+                <td className="px-4 py-3 whitespace-nowrap text-ink">{r.label || r.platform}</td>
+                <td className="px-4 py-3 text-center">
+                  <input type="checkbox" checked={!!r.enabled} onChange={e => set(i, 'enabled', e.target.checked ? 1 : 0)} />
+                </td>
+                <td className="px-4 py-3 text-right"><input type="number" value={r.min_petals} onChange={e => set(i, 'min_petals', e.target.value)} className="input-scroll w-20 px-2 py-1 text-right" /></td>
+                <td className="px-4 py-3 text-right"><input type="number" value={r.unit} onChange={e => set(i, 'unit', e.target.value)} className="input-scroll w-20 px-2 py-1 text-right" /></td>
+                <td className="px-4 py-3 text-right"><input type="number" value={r.price_per_unit} onChange={e => set(i, 'price_per_unit', e.target.value)} className="input-scroll w-20 px-2 py-1 text-right" /></td>
+                <td className="px-4 py-3 text-right"><input type="number" value={r.max_on_sale} onChange={e => set(i, 'max_on_sale', e.target.value)} className="input-scroll w-20 px-2 py-1 text-right" /></td>
+                <td className="px-4 py-3 text-center text-ink-light">{r.on_sale_count}/{r.account_count}</td>
+                <td className="px-4 py-3 text-center"><button onClick={() => save(r)} className="px-4 py-1.5 bg-amber text-white font-serif text-xs tracking-widest hover:bg-amber/90">保存</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <div className="px-6 py-12 text-center font-serif text-sm text-ink-light">暂无渠道配置</div>}
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 通知管理 (admin) ==================== */
+const NoticesAdminPage = () => {
+  const [list, setList] = useState([]);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const load = () => api('GET', '/api/admin/notifications').then(d => setList(d.notifications || [])).catch(e => setMsg(e.message));
+  useEffect(() => { load(); }, []);
+
+  const create = async () => {
+    if (!title.trim()) { setMsg('标题必填'); return; }
+    setMsg('');
+    try { await api('POST', '/api/admin/notifications', { title, content, active: 1 }); setTitle(''); setContent(''); load(); setMsg('公告已发布'); }
+    catch (e) { setMsg(e.message); }
+  };
+
+  const patch = async (id, active) => {
+    try { await api('PATCH', `/api/admin/notifications/${id}`, { active: active ? 1 : 0 }); load(); }
+    catch (e) { setMsg(e.message); }
+  };
+  const del = async (id) => {
+    try { await api('DELETE', `/api/admin/notifications/${id}`); load(); }
+    catch (e) { setMsg(e.message); }
+  };
+
+  return (
+    <div className="page-enter max-w-4xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-8">通知管理</h2>
+      {msg && <p className="font-serif text-sm text-ink mb-6">{msg}</p>}
+
+      <div className="card-deckle bg-white/50 border border-tea-border p-6 mb-10">
+        <h3 className="font-brush text-2xl text-ink mb-4">发布公告</h3>
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="标题" className="input-scroll w-full px-4 py-3 font-serif mb-3" />
+        <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="内容" rows={3} className="input-scroll w-full px-4 py-3 font-serif mb-4" />
+        <button onClick={create} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">发布</button>
+      </div>
+
+      <div className="space-y-3">
+        {list.map(n => (
+          <div key={n.id} className="card-deckle bg-white/40 border border-tea-border p-5 flex items-start justify-between gap-4">
+            <div>
+              <p className="font-serif text-ink">{n.title} <span className="text-xs text-ink-light ml-2">{fmtTime(n.created_at)}</span></p>
+              <p className="font-serif text-sm text-ink-light mt-1 break-all">{n.content}</p>
+              <p className="font-serif text-xs text-ink-light/60 mt-1">{n.active ? '展示中' : '已停用'}</p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => patch(n.id, !n.active)} className="px-3 py-1.5 text-xs font-serif border border-tea-border text-ink-light hover:text-ink">{n.active ? '停用' : '启用'}</button>
+              <button onClick={() => del(n.id)} className="px-3 py-1.5 text-xs font-serif border border-cinnabar/40 text-cinnabar hover:bg-cinnabar/5">删除</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 系统设置 (admin) ==================== */
+const SettingsAdminPage = () => {
+  const [rate, setRate] = useState(100);
+  const [input, setInput] = useState('100');
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    api('GET', '/api/admin/settings').then(d => { setRate(Number(d.token_per_rmb) || 100); setInput(String(d.token_per_rmb || 100)); }).catch(e => setMsg(e.message));
+  }, []);
+
+  const save = async () => {
+    const v = Number(input);
+    if (!v || v < 1) { setMsg('请输入有效汇率'); return; }
+    setMsg('');
+    try { await api('PATCH', '/api/admin/settings', { token_per_rmb: v }); setRate(v); setMsg('汇率已保存'); }
+    catch (e) { setMsg(e.message); }
+  };
+
+  return (
+    <div className="page-enter max-w-2xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-8">系统设置</h2>
+      {msg && <p className="font-serif text-sm text-ink mb-6">{msg}</p>}
+      <div className="card-deckle bg-white/50 border border-tea-border p-6">
+        <h3 className="font-serif text-ink mb-3">代币汇率</h3>
+        <p className="font-serif text-sm text-ink-light mb-4">当前：1 元 = {rate} 代币</p>
+        <div className="flex gap-3">
+          <input type="number" value={input} onChange={e => setInput(e.target.value)} className="input-scroll px-4 py-2.5 font-serif w-40" />
+          <button onClick={save} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">保存</button>
+        </div>
+        <p className="font-serif text-xs text-ink-light mt-4">示例：10 元套餐将到账 {10 * rate} 代币</p>
+      </div>
+    </div>
+  );
+};
+
 /* ==================== App ==================== */
 const App = () => {
   const [currentPage, setPage] = useState('home');
@@ -989,11 +1536,21 @@ const App = () => {
     switch (currentPage) {
       case 'login': return <LoginPage onAuthed={onAuthed} />;
       case 'home': return <HomePage setPage={go} user={user} />;
+      case 'market': return <MarketPage setPage={go} user={user} onBuy={refreshUser} />;
+      case 'me': return <MePage user={user} setPage={go} />;
+      case 'recharge': return <RechargePage user={user} setPage={go} />;
+      case 'invite': return <InvitePage user={user} />;
+      case 'scripts': return <PlaceholderPage title="脚本与皮肤" desc="各路脚本、皮肤与行囊，皆可在此寻得" />;
+      case 'players': return <PlaceholderPage title="玩家市场" desc="玩家之间的号、物与约定在此流通" />;
+      case 'chat': return <PlaceholderPage title="聊天室" desc="亭中诸客共叙闲话" />;
       case 'list': return <ProductListPage setPage={go} user={user} onBuy={refreshUser} />;
       case 'detail': return <ProductDetailPage id={pageParam && pageParam.id} setPage={go} user={user} onBuy={refreshUser} />;
       case 'wallet': return <WalletPage user={user} setPage={go} />;
       case 'pool': return <PoolAdminPage />;
       case 'chlogs': return <ChannelLogsAdminPage />;
+      case 'admin-channels': return <ChannelsAdminPage />;
+      case 'admin-notices': return <NoticesAdminPage />;
+      case 'admin-settings': return <SettingsAdminPage />;
       default: return <HomePage setPage={go} user={user} />;
     }
   };
