@@ -1,0 +1,15 @@
+{
+  "name": "zuiweng-worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create zuiweng-db",
+    "db:init": "wrangler d1 execute zuiweng-db --file=schema.sql",
+    "db:local": "wrangler d1 execute zuiweng-db --local --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.114.0"
+  }
+}

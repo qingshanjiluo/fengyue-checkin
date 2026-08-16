@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>醉翁亭 · 酒馆交易站</title>
+<title>醉翁亭 · 春水雅集</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -11,7 +11,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;600;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
-/* 基础重置与字体 */
 body {
   font-family: 'Noto Serif SC', 'Songti SC', serif;
   background-color: #F5F0E8;
@@ -21,8 +20,6 @@ body {
 .font-brush { font-family: 'Ma Shan Zheng', cursive; }
 .font-serif { font-family: 'Noto Serif SC', serif; }
 .font-lora { font-family: 'Lora', serif; }
-
-/* 宣纸纹理背景 */
 .rice-paper {
   background-color: #F5F0E8;
   position: relative;
@@ -36,38 +33,20 @@ body {
   z-index: 9999;
   opacity: 0.7;
 }
-
-/* 竹影绿背景 */
 .bamboo-bg { background-color: #E8EDE4; }
-
-/* 墨迹淡入 */
 @keyframes inkFadeIn {
   from { opacity: 0; transform: translateY(12px); filter: blur(2px); }
   to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
-.ink-fade {
-  animation: inkFadeIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-/* 印章盖章效果 */
+.ink-fade { animation: inkFadeIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 @keyframes sealDrop {
   0% { opacity: 0; transform: scale(2) rotate(-10deg); }
   60% { opacity: 1; transform: scale(0.9) rotate(2deg); }
   100% { opacity: 1; transform: scale(1) rotate(0deg); }
 }
-.seal-stamp {
-  animation: sealDrop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-/* 按钮按压回弹 */
-.btn-seal {
-  transition: transform 0.15s ease, box-shadow 0.3s ease;
-}
-.btn-seal:active {
-  transform: scale(0.96);
-}
-
-/* 卡片毛边效果 */
+.seal-stamp { animation: sealDrop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.btn-seal { transition: transform 0.15s ease, box-shadow 0.3s ease; }
+.btn-seal:active { transform: scale(0.96); }
 .card-deckle {
   border-radius: 2px 3px 4px 2px / 3px 2px 3px 4px;
   box-shadow: 0 4px 20px rgba(44,42,40,0.06), 0 1px 3px rgba(44,42,40,0.04);
@@ -77,8 +56,6 @@ body {
   transform: translateY(-4px);
   box-shadow: 0 12px 40px rgba(44,42,40,0.1), 0 2px 6px rgba(44,42,40,0.06);
 }
-
-/* 输入框笺纸样式 */
 .input-scroll {
   background: rgba(255,255,255,0.5);
   border: 1px solid #E0D6C8;
@@ -91,60 +68,33 @@ body {
   border-color: #C49B6C;
   box-shadow: inset 0 1px 3px rgba(44,42,40,0.04), 0 0 0 3px rgba(196,155,108,0.1);
 }
-
-/* 页面切换 */
-.page-enter {
-  animation: inkFadeIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-/* 山水背景动画 */
-@keyframes mountainFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
+.page-enter { animation: inkFadeIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes mountainFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 .mountain-float { animation: mountainFloat 8s ease-in-out infinite; }
-
-/* 飞鸟掠过 */
 @keyframes birdFly {
   0% { transform: translateX(-120px) translateY(20px); opacity: 0; }
   20% { opacity: 0.6; }
   80% { opacity: 0.6; }
   100% { transform: translateX(calc(100vw + 120px)) translateY(-10px); opacity: 0; }
 }
-.bird-fly {
-  animation: birdFly 20s linear infinite;
-  animation-delay: 3s;
-}
-
-/* 自定义滚动条 */
+.bird-fly { animation: birdFly 20s linear infinite; animation-delay: 3s; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #E0D6C8; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #C49B6C; }
-
-/* 选中文字颜色 */
 ::selection { background: rgba(196,155,108,0.25); color: #2C2A28; }
 </style>
 <script>
 tailwind.config = {
-  theme: {
-    extend: {
-      colors: {
-        'rice': '#F5F0E8',
-        'bamboo': '#E8EDE4',
-        'ink': '#2C2A28',
-        'ink-light': '#7A756E',
-        'amber': '#C49B6C',
-        'cinnabar': '#C0392B',
-        'tea-border': '#E0D6C8',
-      },
-      fontFamily: {
-        'brush': ['"Ma Shan Zheng"', 'cursive'],
-        'serif': ['"Noto Serif SC"', 'serif'],
-        'lora': ['Lora', 'serif'],
-      }
+  theme: { extend: {
+    colors: {
+      'rice': '#F5F0E8', 'bamboo': '#E8EDE4', 'ink': '#2C2A28', 'ink-light': '#7A756E',
+      'amber': '#C49B6C', 'cinnabar': '#C0392B', 'tea-border': '#E0D6C8',
+    },
+    fontFamily: {
+      'brush': ['"Ma Shan Zheng"', 'cursive'], 'serif': ['"Noto Serif SC"', 'serif'], 'lora': ['Lora', 'serif'],
     }
-  }
+  }}
 }
 </script>
 </head>
@@ -154,7 +104,36 @@ tailwind.config = {
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-/* ==================== 手绘风格图标 ==================== */
+/* ==================== API ==================== */
+const API = 'https://zuiweng-api.sifangzhiji.workers.dev';
+const getToken = () => localStorage.getItem('zw_token') || '';
+const getUser = () => { try { return JSON.parse(localStorage.getItem('zw_user') || 'null'); } catch { return null; } };
+
+async function api(method, path, body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(getToken() ? { Authorization: 'Bearer ' + getToken() } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.message || ('HTTP ' + res.status));
+  return j.data;
+}
+const PLATFORM_LABELS = { aimagnet: '春水酒馆', fengyue: '风月酒馆', missai: '密丝AI', dzmm: 'DZMM' };
+const PLATFORM_UNITS = { aimagnet: '花瓣', fengyue: '积分', missai: '体验点', dzmm: '积分' };
+const CONV_RATE = 1000;   // 花瓣/积分 -> 代币 汇率
+const fmt = (n) => (Number(n) || 0).toLocaleString('zh-CN');
+const fmtTime = (u) => {
+  if (!u) return '—';
+  if (/^\d+$/.test(String(u)) && String(u).length === 10) return new Date(Number(u) * 1000).toLocaleDateString('zh-CN');
+  const t = new Date(String(u).replace(' ', 'T'));
+  return isNaN(t) ? String(u) : t.toLocaleString('zh-CN');
+};
+
+/* ==================== 图标 ==================== */
 const IconPavilion = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 10 L12 4 L20 10"/><path d="M6 10 V18"/><path d="M18 10 V18"/><path d="M4 18 H20"/><path d="M8 14 H16"/>
@@ -170,29 +149,9 @@ const IconScroll = ({ className }) => (
     <rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 8 H16"/><path d="M8 12 H14"/><path d="M8 16 H12"/>
   </svg>
 );
-const IconSearch = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="7"/><path d="M20 20 L16 16"/>
-  </svg>
-);
-const IconUser = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="8" r="4"/><path d="M4 20 C4 16 8 14 12 14 C16 14 20 16 20 20"/>
-  </svg>
-);
 const IconBox = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 3 L21 8 V16 L12 21 L3 16 V8 Z"/><path d="M12 12 L12 21"/><path d="M12 12 L21 8"/><path d="M12 12 L3 8"/>
-  </svg>
-);
-const IconTag = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 12 L12 20 L4 12 L12 4 Z"/><circle cx="12" cy="12" r="2"/>
-  </svg>
-);
-const IconFeather = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 4 C20 4 14 6 10 10 C6 14 4 20 4 20 C4 20 10 18 14 14 C18 10 20 4 20 4 Z"/><path d="M4 20 L9 15"/>
   </svg>
 );
 const IconCoin = ({ className }) => (
@@ -200,24 +159,9 @@ const IconCoin = ({ className }) => (
     <circle cx="12" cy="12" r="9"/><path d="M12 7 V17"/><path d="M9 10 H12"/><path d="M9 14 H15"/>
   </svg>
 );
-const IconArrowLeft = ({ className }) => (
+const IconUser = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M19 12 H5"/><path d="M12 19 L5 12 L12 5"/>
-  </svg>
-);
-const IconFilter = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 4 H20 L14 12 V20 L10 18 V12 Z"/>
-  </svg>
-);
-const IconHeart = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 12 C20 16 16 20 12 21 C8 20 4 16 4 12 C4 8 7 5 10 5 C11.5 5 12.5 6 12 7 C11.5 6 12.5 5 14 5 C17 5 20 8 20 12 Z"/>
-  </svg>
-);
-const IconClock = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 15"/>
+    <circle cx="12" cy="8" r="4"/><path d="M4 20 C4 16 8 14 12 14 C16 14 20 16 20 20"/>
   </svg>
 );
 const IconShield = ({ className }) => (
@@ -225,14 +169,20 @@ const IconShield = ({ className }) => (
     <path d="M12 22 C12 22 20 18 20 12 V5 L12 2 L4 5 V12 C4 18 12 22 12 22 Z"/>
   </svg>
 );
+const IconClock = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 15"/>
+  </svg>
+);
+const IconArrowLeft = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 12 H5"/><path d="M12 19 L5 12 L12 5"/>
+  </svg>
+);
 
-/* ==================== 印章组件 ==================== */
 const SealStamp = ({ text, show, onDone }) => {
   useEffect(() => {
-    if (show) {
-      const timer = setTimeout(onDone, 1500);
-      return () => clearTimeout(timer);
-    }
+    if (show) { const timer = setTimeout(onDone, 1500); return () => clearTimeout(timer); }
   }, [show]);
   if (!show) return null;
   return (
@@ -247,18 +197,18 @@ const SealStamp = ({ text, show, onDone }) => {
 };
 
 /* ==================== 导航栏 ==================== */
-const Navbar = ({ currentPage, setPage }) => {
+const Navbar = ({ currentPage, setPage, user, onLogout }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const isAdmin = user && user.role === 'admin';
   const navItems = [
     { id: 'home', label: '首页' },
-    { id: 'list', label: '逛一逛' },
-    { id: 'publish', label: '出物件' },
+    { id: 'list', label: '春水雅集' },
     { id: 'wallet', label: '货栈' },
+    ...(isAdmin ? [{ id: 'chlogs', label: '渠道报错' }, { id: 'pool', label: '号池监看' }] : []),
   ];
   return (
     <nav className="sticky top-0 z-50 bg-rice/80 backdrop-blur-md border-b border-tea-border">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        {/* Logo */}
         <button onClick={() => setPage('home')} className="flex items-center gap-3 group">
           <div className="relative w-10 h-10 flex items-center justify-center">
             <IconPavilion className="w-7 h-7 text-ink absolute" />
@@ -267,203 +217,299 @@ const Navbar = ({ currentPage, setPage }) => {
           <span className="font-brush text-2xl text-ink tracking-widest group-hover:text-amber transition-colors duration-500">醉翁亭</span>
         </button>
 
-        {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-10">
           {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setPage(item.id)}
-              className={`relative font-serif text-sm tracking-widest transition-colors duration-300 ${currentPage === item.id ? 'text-amber' : 'text-ink-light hover:text-ink'}`}
-            >
+            <button key={item.id} onClick={() => setPage(item.id)}
+              className={`relative font-serif text-sm tracking-widest transition-colors duration-300 ${currentPage === item.id ? 'text-amber' : 'text-ink-light hover:text-ink'}`}>
               {item.label}
-              {currentPage === item.id && (
-                <span className="absolute -bottom-1 left-0 w-full h-px bg-amber/60" />
-              )}
+              {currentPage === item.id && <span className="absolute -bottom-1 left-0 w-full h-px bg-amber/60" />}
             </button>
           ))}
         </div>
 
-        {/* Right Side */}
         <div className="hidden md:flex items-center gap-5">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="寻一物..."
-              className="input-scroll pl-9 pr-4 py-1.5 w-48 text-sm font-serif text-ink placeholder:text-ink-light/50"
-            />
-            <IconSearch className="w-4 h-4 text-ink-light absolute left-3 top-1/2 -translate-y-1/2" />
-          </div>
-          <button onClick={() => setPage('wallet')} className="w-9 h-9 rounded-full border border-tea-border flex items-center justify-center hover:border-amber transition-colors duration-300">
-            <IconUser className="w-5 h-5 text-ink-light" />
-          </button>
+          {user ? (
+            <>
+              <span className="font-serif text-sm text-ink-light flex items-center gap-1.5">
+                <IconCoin className="w-4 h-4 text-amber" />{fmt(user.balance)}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-serif text-sm text-ink">{user.username}</span>
+                <button onClick={onLogout} className="font-serif text-xs text-ink-light hover:text-cinnabar border border-tea-border px-3 py-1 tracking-widest">退栈</button>
+              </div>
+            </>
+          ) : (
+            <button onClick={() => setPage('login')} className="font-serif text-sm text-ink-light border border-tea-border px-5 py-1.5 tracking-widest hover:border-amber hover:text-amber transition-colors duration-300">
+              登栈
+            </button>
+          )}
         </div>
 
-        {/* Mobile Menu Button */}
         <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)}>
           <div className="w-5 h-px bg-ink mb-1.5"></div>
           <div className="w-5 h-px bg-ink mb-1.5"></div>
           <div className="w-5 h-px bg-ink"></div>
         </button>
       </div>
-
-      {/* Mobile Menu */}
       {menuOpen && (
         <div className="md:hidden border-t border-tea-border bg-rice/95 px-6 py-4 space-y-4 ink-fade">
           {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => { setPage(item.id); setMenuOpen(false); }}
-              className={`block w-full text-left font-serif text-base tracking-widest py-2 ${currentPage === item.id ? 'text-amber' : 'text-ink-light'}`}
-            >
+            <button key={item.id} onClick={() => { setPage(item.id); setMenuOpen(false); }}
+              className={`block w-full text-left font-serif text-base tracking-widest py-2 ${currentPage === item.id ? 'text-amber' : 'text-ink-light'}`}>
               {item.label}
             </button>
           ))}
+          {user ? (
+            <button onClick={() => { onLogout(); setMenuOpen(false); }} className="block w-full text-left font-serif text-sm text-cinnabar py-2 tracking-widest">退栈 ({user.username})</button>
+          ) : (
+            <button onClick={() => { setPage('login'); setMenuOpen(false); }} className="block w-full text-left font-serif text-sm text-amber py-2 tracking-widest">登栈</button>
+          )}
         </div>
       )}
     </nav>
   );
 };
 
-/* ==================== 首页 ==================== */
-const HomePage = ({ setPage }) => {
+/* ==================== 登录 / 注册 ==================== */
+const LoginPage = ({ onAuthed }) => {
+  const [mode, setMode] = useState('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true); setMsg('');
+    try {
+      if (mode === 'login') {
+        const d = await api('POST', '/api/auth/login', { username, password });
+        localStorage.setItem('zw_token', d.token);
+        localStorage.setItem('zw_user', JSON.stringify(d.user));
+        onAuthed(d.user);
+      } else {
+        await api('POST', '/api/auth/register', { username, password });
+        setMode('login'); setMsg('注册成功，请登栈');
+      }
+    } catch (e) { setMsg(e.message); }
+    setBusy(false);
+  };
+
   return (
-    <div className="page-enter min-h-[calc(100vh-64px)] relative overflow-hidden">
-      {/* 写意山水背景 */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute bottom-0 left-0 right-0 h-[60%] opacity-[0.07]">
-          <svg className="w-full h-full mountain-float" viewBox="0 0 1440 600" preserveAspectRatio="none">
-            <path d="M0 600 L0 400 Q200 350 400 380 Q600 300 800 340 Q1000 280 1200 320 Q1300 300 1440 350 L1440 600 Z" fill="#2C2A28"/>
-            <path d="M0 600 L0 450 Q300 400 500 430 Q700 380 900 410 Q1100 360 1440 400 L1440 600 Z" fill="#3A3836" opacity="0.5"/>
-          </svg>
-        </div>
-        {/* 飞鸟 */}
-        <div className="bird-fly absolute top-[15%] left-0 opacity-20">
-          <svg width="40" height="20" viewBox="0 0 40 20">
-            <path d="M0 10 Q10 0 20 10 Q30 0 40 10" fill="none" stroke="#2C2A28" strokeWidth="1"/>
-          </svg>
-        </div>
-        {/* 亭台一角 */}
-        <div className="absolute bottom-[20%] right-[8%] opacity-[0.06]">
-          <svg width="120" height="140" viewBox="0 0 120 140">
-            <path d="M10 60 L60 20 L110 60" fill="none" stroke="#2C2A28" strokeWidth="2"/>
-            <rect x="30" y="60" width="60" height="60" fill="none" stroke="#2C2A28" strokeWidth="1.5"/>
-            <path d="M30 90 H90" stroke="#2C2A28" strokeWidth="1"/>
-          </svg>
-        </div>
+    <div className="page-enter max-w-md mx-auto px-6 py-16">
+      <div className="text-center mb-10">
+        <h2 className="font-brush text-4xl text-ink mb-3">{mode === 'login' ? '登栈' : '入亭'}</h2>
+        <p className="font-serif text-sm text-ink-light tracking-widest">{mode === 'login' ? '有信物者，方入此门' : '注册一枚亭内信物'}</p>
       </div>
-
-      {/* 主内容 */}
-      <div className="relative z-10 max-w-4xl mx-auto px-6 pt-20 md:pt-32 pb-20 text-center">
-        <h1 className="font-brush text-6xl md:text-8xl text-ink mb-6 ink-fade tracking-widest" style={{animationDelay:'0.2s',opacity:0}}>
-          醉翁亭
-        </h1>
-        <div className="flex items-center justify-center gap-4 mb-8 ink-fade" style={{animationDelay:'0.5s',opacity:0}}>
-          <span className="h-px w-12 bg-amber/40"></span>
-          <span className="font-serif text-lg md:text-xl text-ink-light tracking-[0.3em]">酒馆交易站</span>
-          <span className="h-px w-12 bg-amber/40"></span>
+      <div className="bg-white/40 border border-tea-border p-8 relative">
+        <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-amber/20"></div>
+        <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-amber/20"></div>
+        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-amber/20"></div>
+        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-amber/20"></div>
+        <div className="space-y-5">
+          <div>
+            <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">名号</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="你的名号..." className="input-scroll w-full px-4 py-3 font-serif text-ink placeholder:text-ink-light/40" />
+          </div>
+          <div>
+            <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">密语</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="口令（至少 6 位）" className="input-scroll w-full px-4 py-3 font-serif text-ink placeholder:text-ink-light/40" />
+          </div>
+          {msg && <p className="font-serif text-sm text-cinnabar">{msg}</p>}
+          <button onClick={submit} disabled={busy}
+            className="btn-seal w-full py-3.5 bg-amber text-white font-serif tracking-[0.3em] text-center hover:bg-amber/90 transition-colors duration-300 shadow-sm disabled:opacity-60">
+            {busy ? '稍候...' : (mode === 'login' ? '登栈' : '注册')}
+          </button>
+          <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+            className="w-full text-center font-serif text-sm text-ink-light hover:text-amber tracking-widest">
+            {mode === 'login' ? '尚未入亭？注册一枚信物' : '已有信物？返回登栈'}
+          </button>
         </div>
-        <p className="font-serif text-base md:text-lg text-ink-light/80 mb-16 tracking-wider ink-fade" style={{animationDelay:'0.8s',opacity:0}}>
-          醉翁之意不在酒，在乎山水之间也。
-        </p>
-
-        {/* 三个入口卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-3xl mx-auto">
-          {[
-            { icon: IconScroll, title: '逛一逛', desc: '浏览雅集', page: 'list' },
-            { icon: IconFeather, title: '出物件', desc: '发布出售', page: 'publish' },
-            { icon: IconBox, title: '我的货栈', desc: '个人中心', page: 'wallet' },
-          ].map((item, i) => (
-            <button
-              key={item.title}
-              onClick={() => setPage(item.page)}
-              className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade"
-              style={{animationDelay:`${1 + i * 0.2}s`,opacity:0}}
-            >
-              <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
-                <item.icon className="w-7 h-7 text-ink-light group-hover:text-amber transition-colors duration-500" />
-              </div>
-              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">{item.title}</h3>
-              <p className="font-serif text-sm text-ink-light tracking-widest">{item.desc}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 底部标语 */}
-      <div className="absolute bottom-8 left-0 right-0 text-center pointer-events-none">
-        <p className="font-serif text-xs text-ink-light/40 tracking-[0.2em] ink-fade" style={{animationDelay:'1.8s',opacity:0}}>
-          醉翁亭 · 在数字空间中重寻物与缘的流转
-        </p>
       </div>
     </div>
   );
 };
 
-/* ==================== 商品列表页 ==================== */
-const ProductListPage = ({ setPage }) => {
-  const [filter, setFilter] = useState('all');
-  const filters = [
-    { id: 'all', label: '全部' },
-    { id: 'account', label: '游戏账号' },
-    { id: 'script', label: '脚本工具' },
-    { id: 'token', label: '代币' },
-    { id: 'art', label: '角色定制' },
-  ];
-  const products = [
-    { id: 1, title: '满级刺客账号 · 全图鉴', category: 'account', price: '¥1,280', seller: '竹林隐士', tag: '珍品' },
-    { id: 2, title: '自动挂机脚本 · 稳定三月', category: 'script', price: '¥320', seller: '墨斋主人', tag: '热销' },
-    { id: 3, title: '酒馆代币 · 5000枚', category: 'token', price: '¥500', seller: '醉里挑灯', tag: '' },
-    { id: 4, title: '古风角色立绘定制', category: 'art', price: '¥800', seller: '丹青手', tag: '推荐' },
-    { id: 5, title: '稀有装备套装 · 未绑定', category: 'account', price: '¥2,400', seller: '云山道人', tag: '珍品' },
-    { id: 6, title: '副本通关辅助工具', category: 'script', price: '¥150', seller: '无名氏', tag: '' },
-  ];
+/* ==================== 首页 ==================== */
+const HomePage = ({ setPage, user }) => {
+  const [stats, setStats] = useState(null);
+  const [chlogs, setChlogs] = useState([]);
 
-  const filtered = filter === 'all' ? products : products.filter(p => p.category === filter);
+  useEffect(() => {
+    api('GET', '/api/stats').then(d => setStats(d)).catch(() => {});
+    api('GET', '/api/channel-logs').then(d => setChlogs(d.platforms || [])).catch(() => {});
+  }, []);
+
+  const catLabel = { register: '注册', daily: '签到', login: '登录' };
+
+  return (
+    <>
+      <div className="page-enter min-h-[calc(100vh-64px)] relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute bottom-0 left-0 right-0 h-[60%] opacity-[0.07]">
+            <svg className="w-full h-full mountain-float" viewBox="0 0 1440 600" preserveAspectRatio="none">
+              <path d="M0 600 L0 400 Q200 350 400 380 Q600 300 800 340 Q1000 280 1200 320 Q1300 300 1440 350 L1440 600 Z" fill="#2C2A28"/>
+              <path d="M0 600 L0 450 Q300 400 500 430 Q700 380 900 410 Q1100 360 1440 400 L1440 600 Z" fill="#3A3836" opacity="0.5"/>
+            </svg>
+          </div>
+          <div className="bird-fly absolute top-[15%] left-0 opacity-20">
+            <svg width="40" height="20" viewBox="0 0 40 20">
+              <path d="M0 10 Q10 0 20 10 Q30 0 40 10" fill="none" stroke="#2C2A28" strokeWidth="1"/>
+            </svg>
+          </div>
+          <div className="absolute bottom-[20%] right-[8%] opacity-[0.06]">
+            <svg width="120" height="140" viewBox="0 0 120 140">
+              <path d="M10 60 L60 20 L110 60" fill="none" stroke="#2C2A28" strokeWidth="2"/>
+              <rect x="30" y="60" width="60" height="60" fill="none" stroke="#2C2A28" strokeWidth="1.5"/>
+              <path d="M30 90 H90" stroke="#2C2A28" strokeWidth="1"/>
+            </svg>
+          </div>
+        </div>
+
+        <div className="relative z-10 max-w-4xl mx-auto px-6 pt-20 md:pt-32 pb-20 text-center">
+          <h1 className="font-brush text-6xl md:text-8xl text-ink mb-6 ink-fade tracking-widest" style={{animationDelay:'0.2s',opacity:0}}>醉翁亭</h1>
+          <div className="flex items-center justify-center gap-4 mb-8 ink-fade" style={{animationDelay:'0.5s',opacity:0}}>
+            <span className="h-px w-12 bg-amber/40"></span>
+            <span className="font-serif text-lg md:text-xl text-ink-light tracking-[0.3em]">春水雅集</span>
+            <span className="h-px w-12 bg-amber/40"></span>
+          </div>
+          <p className="font-serif text-base md:text-lg text-ink-light/80 mb-16 tracking-wider ink-fade" style={{animationDelay:'0.8s',opacity:0}}>
+            醉翁之意不在酒，在乎春水花瓣之间也。
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-3xl mx-auto">
+            <button onClick={() => setPage('list')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1s',opacity:0}}>
+              <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
+                <IconScroll className="w-7 h-7 text-ink-light group-hover:text-amber transition-colors duration-500" />
+              </div>
+              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">春水雅集</h3>
+              <p className="font-serif text-sm text-ink-light tracking-widest">以代币购养好的春水号</p>
+            </button>
+            <button onClick={() => setPage('wallet')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1.2s',opacity:0}}>
+              <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
+                <IconBox className="w-7 h-7 text-ink-light group-hover:text-amber transition-colors duration-500" />
+              </div>
+              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">货栈</h3>
+              <p className="font-serif text-sm text-ink-light tracking-widest">余钱、流水与我购得的号</p>
+            </button>
+            <button onClick={() => setPage('login')} className="card-deckle bg-white/40 backdrop-blur-sm border border-tea-border p-8 text-center group ink-fade" style={{animationDelay:'1.4s',opacity:0}}>
+              <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-tea-border flex items-center justify-center group-hover:border-amber group-hover:bg-amber/5 transition-all duration-500">
+                <IconUser className="w-7 h-7 text-ink-light group-hover:text-amber transition-colors duration-500" />
+              </div>
+              <h3 className="font-brush text-2xl text-ink mb-2 group-hover:text-amber transition-colors duration-500">{user ? user.username : '登栈'}</h3>
+              <p className="font-serif text-sm text-ink-light tracking-widest">{user ? '已是亭中客' : '持信物入亭'}</p>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 pb-16 -mt-8 relative z-10 space-y-12">
+        {/* 号池一览 */}
+        {stats && (
+          <div className="page-enter">
+            <h3 className="font-brush text-3xl text-ink mb-6">号池一览</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {[
+                { label: '号池总量', value: stats.summary.total },
+                { label: '在售号数', value: stats.summary.on_sale },
+                { label: '已售号数', value: stats.summary.sold },
+                { label: '今日签到', value: stats.summary.signed_today },
+              ].map(s => (
+                <div key={s.label} className="card-deckle bg-white/50 border border-tea-border p-5 text-center">
+                  <p className="font-lora text-2xl font-semibold text-ink">{fmt(s.value)}</p>
+                  <p className="font-serif text-xs text-ink-light tracking-widest mt-1">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(stats.platforms || []).map(pl => (
+                <div key={pl.platform} className="card-deckle bg-white/40 border border-tea-border p-5 flex items-center justify-between">
+                  <div>
+                    <p className="font-serif font-semibold text-ink">{PLATFORM_LABELS[pl.platform] || pl.platform}</p>
+                    <p className="font-serif text-xs text-ink-light mt-1 tracking-widest">在售 {pl.on_sale} / 已售 {pl.sold} / 总数 {pl.total}</p>
+                  </div>
+                  <span className="font-lora text-lg text-amber">{fmt(pl.total_petals)} {(PLATFORM_UNITS[pl.platform] || '积分')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 渠道状态（报错详情） */}
+        <div className="page-enter">
+          <h3 className="font-brush text-3xl text-ink mb-6">渠道状态</h3>
+          {chlogs.length === 0 ? (
+            <div className="card-deckle bg-white/40 border border-tea-border p-6 text-center">
+              <p className="font-serif text-ink-light tracking-widest">各渠道运行正常，暂无报错</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {chlogs.map(c => (
+                <div key={c.platform} className="card-deckle bg-white/50 border border-tea-border p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-serif font-semibold text-ink">{PLATFORM_LABELS[c.platform] || c.platform} <span className="text-cinnabar text-sm ml-2">报错 {c.count} 次</span></p>
+                    <span className="font-serif text-xs text-ink-light">{fmtTime((c.recent[0] || {}).created_at)}</span>
+                  </div>
+                  {(c.recent || []).map((r, i) => (
+                    <div key={i} className="border-l-2 border-cinnabar/30 pl-3 py-1.5">
+                      <p className="font-serif text-sm text-ink break-all">{r.message}</p>
+                      <p className="font-serif text-xs text-ink-light mt-0.5">[{catLabel[r.category] || r.category}] {fmtTime(r.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+/* ==================== 春水雅集（商品列表） ==================== */
+const ProductListPage = ({ setPage, user, onBuy }) => {
+  const [products, setProducts] = useState([]);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    api('GET', '/api/products')
+      .then(d => setProducts(d.products || []))
+      .catch(e => setErr(e.message));
+  }, []);
 
   return (
     <div className="page-enter max-w-6xl mx-auto px-6 py-10">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-10">
         <div>
-          <h2 className="font-brush text-4xl text-ink mb-2">雅集</h2>
-          <p className="font-serif text-sm text-ink-light tracking-widest">往来皆有意，交易亦有情</p>
+          <h2 className="font-brush text-4xl text-ink mb-2">春水雅集</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">春水号均每日签到照养，附邮箱与密语交付</p>
         </div>
-        <div className="flex items-center gap-3">
-          <IconFilter className="w-4 h-4 text-ink-light" />
-          <div className="flex flex-wrap gap-2">
-            {filters.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setFilter(f.id)}
-                className={`px-4 py-1.5 text-sm font-serif tracking-wider border transition-all duration-300 ${filter === f.id ? 'border-amber text-amber bg-amber/5' : 'border-tea-border text-ink-light hover:border-amber/50'}`}
-              >
-                {f.label}
-              </button>
-            ))}
+        {user && (
+          <div className="flex items-center gap-2 font-serif text-sm text-ink-light">
+            <IconCoin className="w-4 h-4 text-amber" />余钱 {fmt(user.balance)} 枚
           </div>
-        </div>
+        )}
       </div>
-
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">加载失败：{err}</p>}
+      {!err && products.length === 0 && (
+        <div className="text-center py-20">
+          <IconScroll className="w-16 h-16 text-ink-light/20 mx-auto mb-4" />
+          <p className="font-serif text-ink-light tracking-widest">暂无在售的春水号，稍后再来</p>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.map((product, i) => (
-          <button
-            key={product.id}
-            onClick={() => setPage('detail')}
-            className="card-deckle bg-white/50 border border-tea-border p-6 text-left group ink-fade"
-            style={{animationDelay:`${i * 0.1}s`,opacity:0}}
-          >
+        {products.map((p, i) => (
+          <button key={p.id} onClick={() => setPage('detail', { id: p.id })}
+            className="card-deckle bg-white/50 border border-tea-border p-6 text-left group ink-fade" style={{animationDelay:`${i * 0.1}s`,opacity:0}}>
             <div className="aspect-[4/3] bg-bamboo/50 border border-tea-border/50 mb-5 flex items-center justify-center relative overflow-hidden">
-              <IconBox className="w-12 h-12 text-ink-light/20" />
-              {product.tag && (
-                <span className="absolute top-3 right-3 px-2 py-0.5 text-xs font-serif border border-amber/40 text-amber bg-amber/5">
-                  {product.tag}
-                </span>
-              )}
+              <IconWine className="w-12 h-12 text-ink-light/20" />
+              <span className="absolute top-3 right-3 px-2 py-0.5 text-xs font-serif border border-amber/40 text-amber bg-amber/5">{PLATFORM_LABELS[p.platform || 'aimagnet'] || '酒馆号'}</span>
             </div>
-            <h3 className="font-serif text-lg text-ink mb-2 group-hover:text-amber transition-colors duration-300">{product.title}</h3>
+            <h3 className="font-serif text-lg text-ink mb-2 group-hover:text-amber transition-colors duration-300">春水号 · {p.nickname}</h3>
             <div className="flex items-center justify-between">
-              <span className="font-lora text-xl font-semibold text-cinnabar">{product.price}</span>
-              <span className="text-xs text-ink-light font-serif">@{product.seller}</span>
+              <span className="font-lora text-xl font-semibold text-cinnabar">{fmt(p.price)} 枚代币</span>
+              <span className="text-xs text-ink-light font-serif">花瓣 {fmt(p.petals)}</span>
             </div>
+            <p className="text-xs text-ink-light font-serif mt-2">入亭于 {fmtTime(p.registered_at)}</p>
           </button>
         ))}
       </div>
@@ -471,271 +517,499 @@ const ProductListPage = ({ setPage }) => {
   );
 };
 
-/* ==================== 商品详情页 ==================== */
-const ProductDetailPage = ({ setPage }) => {
+/* ==================== 账号详情 / 购买 ==================== */
+const ProductDetailPage = ({ id, setPage, user, onAuthed, onBuy }) => {
+  const [info, setInfo] = useState(null);
+  const [err, setErr] = useState('');
   const [seal, setSeal] = useState(null);
+  const [delivered, setDelivered] = useState(null);
 
-  const handleSeal = (text) => {
-    setSeal(text);
+  useEffect(() => {
+    const p = (user ? api('GET', '/api/products') : Promise.resolve({ products: [] }))
+      .then(d => {
+        const found = (d.products || []).find(x => x.id === Number(id));
+        if (found) setInfo(found);
+        else setErr('该号已售出或不存在');
+      })
+      .catch(e => setErr(e.message));
+  }, [id, user]);
+
+  const buy = async () => {
+    if (!user) { setPage('login'); return; }
+    try {
+      const d = await api('POST', '/api/orders', { account_id: Number(id) });
+      setDelivered(d.account);
+      setSeal('已收');
+      onBuy();
+    } catch (e) { setErr(e.message); }
   };
 
   return (
     <div className="page-enter max-w-4xl mx-auto px-6 py-10">
       <button onClick={() => setPage('list')} className="flex items-center gap-2 text-ink-light hover:text-amber transition-colors duration-300 mb-8 font-serif text-sm tracking-widest">
-        <IconArrowLeft className="w-4 h-4" />
-        返回雅集
+        <IconArrowLeft className="w-4 h-4" />返回雅集
       </button>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        {/* 左侧图片 */}
-        <div className="aspect-square bg-bamboo/40 border border-tea-border flex items-center justify-center relative">
-          <IconScroll className="w-24 h-24 text-ink-light/15" />
-          <div className="absolute bottom-4 left-4 right-4 flex gap-2">
-            <span className="px-3 py-1 text-xs font-serif border border-amber/30 text-amber bg-amber/5">珍品</span>
-            <span className="px-3 py-1 text-xs font-serif border border-tea-border text-ink-light">游戏账号</span>
+      {delivered ? (
+        <div className="bg-white/50 border border-tea-border p-8 text-center">
+          <p className="font-brush text-3xl text-ink mb-2">号已交付</p>
+          <p className="font-serif text-sm text-ink-light tracking-widest mb-8">请记下此号的登录信物，妥善保管</p>
+          <div className="max-w-md mx-auto bg-bamboo/40 border border-tea-border p-6 space-y-3 text-left">
+            <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">昵称</span><span className="font-serif text-ink">{delivered.nickname}</span></div>
+            <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">邮箱</span><span className="font-serif text-ink">{delivered.email}</span></div>
+            <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">密语</span><span className="font-serif text-ink">{delivered.password}</span></div>
+            <div className="flex justify-between"><span className="text-ink-light font-serif text-sm">花瓣</span><span className="font-lora text-ink">{fmt(delivered.petals)}</span></div>
+          </div>
+          <button onClick={() => setPage('wallet')} className="mt-8 px-8 py-2.5 bg-amber text-white font-serif tracking-widest hover:bg-amber/90 transition-colors">去货栈查看</button>
+        </div>
+      ) : info ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="aspect-square bg-bamboo/40 border border-tea-border flex items-center justify-center relative">
+            <IconWine className="w-24 h-24 text-ink-light/15" />
+            <div className="absolute bottom-4 left-4 right-4 flex gap-2">
+              <span className="px-3 py-1 text-xs font-serif border border-amber/30 text-amber bg-amber/5">春水号</span>
+              <span className="px-3 py-1 text-xs font-serif border border-tea-border text-ink-light">每日签到照养</span>
+            </div>
+          </div>
+          <div>
+            <h1 className="font-brush text-4xl text-ink mb-4">春水号 · {info.nickname}</h1>
+            <div className="flex items-baseline gap-3 mb-6">
+              <span className="font-lora text-3xl font-bold text-cinnabar">{fmt(info.price)} 枚代币</span>
+            </div>
+            <div className="space-y-3 mb-8">
+              {[
+                { label: '花瓣存量', value: fmt(info.petals) },
+                { label: '入亭时间', value: fmtTime(info.registered_at) },
+                { label: '含邮箱密语', value: '交付时一并奉上' },
+              ].map(item => (
+                <div key={item.label} className="flex justify-between py-2 border-b border-tea-border/50">
+                  <span className="text-sm text-ink-light font-serif">{item.label}</span>
+                  <span className="text-sm text-ink font-serif">{item.value}</span>
+                </div>
+              ))}
+            </div>
+            {err && <p className="font-serif text-sm text-cinnabar mb-4">{err}</p>}
+            <button onClick={buy} className="btn-seal flex-1 py-3.5 bg-amber text-white font-serif tracking-[0.2em] text-center hover:bg-amber/90 transition-colors duration-300 shadow-sm w-full">
+              {user ? `以 ${fmt(info.price)} 枚代币收下` : '登栈后再购'}
+            </button>
+            {user && <p className="text-center text-xs text-ink-light font-serif mt-3">余钱 {fmt(user.balance)} 枚</p>}
           </div>
         </div>
-
-        {/* 右侧信息 */}
-        <div>
-          <h1 className="font-brush text-4xl text-ink mb-4">满级刺客账号 · 全图鉴</h1>
-          <div className="flex items-baseline gap-3 mb-6">
-            <span className="font-lora text-3xl font-bold text-cinnabar">¥1,280</span>
-            <span className="text-sm text-ink-light font-serif line-through">¥1,600</span>
-          </div>
-
-          {/* 卖家信息 - 信笺样式 */}
-          <div className="bg-white/40 border border-tea-border p-5 mb-6 relative">
-            <div className="absolute -top-3 left-6 w-16 h-6 bg-rice flex items-center justify-center">
-              <span className="text-xs font-serif text-ink-light tracking-widest">卖家帖</span>
-            </div>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full border border-tea-border bg-bamboo flex items-center justify-center">
-                <span className="font-brush text-lg text-ink-light">竹</span>
-              </div>
-              <div>
-                <p className="font-serif text-ink font-semibold">竹林隐士</p>
-                <p className="text-xs text-ink-light font-serif">信誉 · 九品 · 成交 47 笔</p>
-              </div>
-            </div>
-            <p className="font-serif text-sm text-ink-light leading-relaxed">
-              此号养三年有余，全图鉴收集，稀有皮肤未动用。因退游寻有缘人接手，愿以诚意价转让。
-            </p>
-          </div>
-
-          {/* 属性 */}
-          <div className="space-y-3 mb-8">
-            {[
-              { label: '等级', value: '满级 (120)' },
-              { label: '服务器', value: '云山雾罩 · 一区' },
-              { label: '绑定状态', value: '可换绑' },
-              { label: '上架时间', value: '三日前' },
-            ].map(item => (
-              <div key={item.label} className="flex justify-between py-2 border-b border-tea-border/50">
-                <span className="text-sm text-ink-light font-serif">{item.label}</span>
-                <span className="text-sm text-ink font-serif">{item.value}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* 交易按钮 */}
-          <div className="flex gap-4">
-            <button
-              onClick={() => handleSeal('已收')}
-              className="btn-seal flex-1 py-3.5 bg-amber text-white font-serif tracking-[0.2em] text-center hover:bg-amber/90 transition-colors duration-300 shadow-sm"
-            >
-              收入囊中
-            </button>
-            <button
-              onClick={() => handleSeal('已询')}
-              className="btn-seal px-6 py-3.5 border border-tea-border text-ink-light font-serif tracking-widest hover:border-amber hover:text-amber transition-colors duration-300"
-            >
-              询价的
-            </button>
-          </div>
+      ) : (
+        <div className="text-center py-20">
+          <IconClock className="w-12 h-12 text-ink-light/20 mx-auto mb-4" />
+          <p className="font-serif text-ink-light tracking-widest">{err || '载入中...'}</p>
         </div>
-      </div>
+      )}
 
       <SealStamp text={seal} show={!!seal} onDone={() => setSeal(null)} />
     </div>
   );
 };
 
-/* ==================== 发布商品页 ==================== */
-const PublishPage = ({ setPage }) => {
-  const [seal, setSeal] = useState(null);
+/* ==================== 货栈（钱包 + 我的号） ==================== */
+const WalletPage = ({ user, onAuthed }) => {
+  const [wallet, setWallet] = useState(null);
+  const [mine, setMine] = useState([]);
+  const [err, setErr] = useState('');
 
-  return (
-    <div className="page-enter max-w-2xl mx-auto px-6 py-10">
-      <div className="text-center mb-10">
-        <h2 className="font-brush text-4xl text-ink mb-3">出物件</h2>
-        <p className="font-serif text-sm text-ink-light tracking-widest">铺纸研墨，写一张出售帖</p>
+  useEffect(() => {
+    if (!user) return;
+    api('GET', '/api/wallet').then(setWallet).catch(e => setErr(e.message));
+    api('GET', '/api/accounts/mine').then(d => setMine(d.accounts || [])).catch(() => {});
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="page-enter max-w-md mx-auto px-6 py-20 text-center">
+        <p className="font-serif text-ink-light tracking-widest mb-6">未持信物，无法开启货栈</p>
+        <button onClick={() => setPage('login')} className="px-8 py-2.5 bg-amber text-white font-serif tracking-widest">去登栈</button>
       </div>
-
-      <div className="bg-white/40 border border-tea-border p-8 md:p-10 relative">
-        {/* 信笺装饰角 */}
-        <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-amber/20"></div>
-        <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-amber/20"></div>
-        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-amber/20"></div>
-        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-amber/20"></div>
-
-        <div className="space-y-6">
-          <div>
-            <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">物名</label>
-            <input type="text" placeholder="给物件取个雅名..." className="input-scroll w-full px-4 py-3 font-serif text-ink placeholder:text-ink-light/40" />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">品类</label>
-              <select className="input-scroll w-full px-4 py-3 font-serif text-ink bg-transparent">
-                <option>游戏账号</option>
-                <option>脚本工具</option>
-                <option>内部代币</option>
-                <option>角色定制</option>
-              </select>
-            </div>
-            <div>
-              <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">标价</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-light font-lora">¥</span>
-                <input type="number" placeholder="0" className="input-scroll w-full pl-10 pr-4 py-3 font-lora text-ink placeholder:text-ink-light/40" />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">物状描述</label>
-            <textarea
-              rows="6"
-              placeholder="细细道来此物的来历、品相与故事..."
-              className="input-scroll w-full px-4 py-3 font-serif text-ink placeholder:text-ink-light/40 resize-none leading-relaxed"
-            />
-          </div>
-
-          <div>
-            <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">贴图</label>
-            <div className="border-2 border-dashed border-tea-border p-8 text-center hover:border-amber/40 transition-colors duration-300 cursor-pointer">
-              <IconFeather className="w-8 h-8 text-ink-light/30 mx-auto mb-3" />
-              <p className="text-sm text-ink-light font-serif">点击或拖拽图片至此</p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setSeal('已帖')}
-            className="btn-seal w-full py-4 bg-cinnabar text-white font-serif tracking-[0.3em] text-center hover:bg-cinnabar/90 transition-colors duration-300 shadow-sm mt-4"
-          >
-            张贴出售帖
-          </button>
-        </div>
-      </div>
-
-      <SealStamp text={seal} show={!!seal} onDone={() => setSeal(null)} />
-    </div>
-  );
-};
-
-/* ==================== 钱包页 ==================== */
-const WalletPage = ({ setPage }) => {
-  const transactions = [
-    { type: 'in', title: '出售 · 挂机脚本', amount: '+ ¥320', date: '乙巳年 三月初七' },
-    { type: 'out', title: '购入 · 稀有装备', amount: '- ¥800', date: '乙巳年 三月初五' },
-    { type: 'in', title: '代币兑换', amount: '+ ¥500', date: '乙巳年 二月廿八' },
-    { type: 'out', title: '购入 · 角色立绘', amount: '- ¥600', date: '乙巳年 二月廿五' },
-  ];
+    );
+  }
 
   return (
     <div className="page-enter max-w-3xl mx-auto px-6 py-10">
       <div className="text-center mb-10">
         <h2 className="font-brush text-4xl text-ink mb-3">货栈</h2>
-        <p className="font-serif text-sm text-ink-light tracking-widest">银钱往来，清清楚楚</p>
+        <p className="font-serif text-sm text-ink-light tracking-widest">余钱、流水与购得的号</p>
       </div>
 
-      {/* 余额卡片 - 银票样式 */}
       <div className="relative bg-bamboo/60 border border-tea-border p-8 mb-10 overflow-hidden">
-        <div className="absolute top-4 right-4 opacity-10">
-          <IconCoin className="w-32 h-32 text-ink" />
-        </div>
+        <div className="absolute top-4 right-4 opacity-10"><IconCoin className="w-32 h-32 text-ink" /></div>
         <div className="relative z-10">
           <p className="font-serif text-sm text-ink-light tracking-widest mb-2">当前余钱</p>
-          <p className="font-lora text-5xl font-bold text-ink mb-4">¥ 3,240</p>
-          <div className="flex gap-4">
-            <button className="btn-seal px-6 py-2 bg-amber text-white text-sm font-serif tracking-widest hover:bg-amber/90 transition-colors">充值</button>
-            <button className="btn-seal px-6 py-2 border border-tea-border text-ink-light text-sm font-serif tracking-widest hover:border-amber hover:text-amber transition-colors">提现</button>
-          </div>
+          <p className="font-lora text-5xl font-bold text-ink mb-2">{fmt(wallet ? wallet.balance : 0)} <span className="text-xl text-ink-light font-serif">枚</span></p>
+          <p className="font-serif text-xs text-ink-light">如需充值，请向亭主（管理员）索要代币</p>
         </div>
-        {/* 银票花纹 */}
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-amber/20 to-transparent"></div>
       </div>
 
-      {/* 账本 */}
+      {mine.length > 0 && (
+        <div className="mb-10">
+          <h3 className="font-brush text-2xl text-ink mb-4">我的春水号</h3>
+          <div className="space-y-3">
+            {mine.map(a => (
+              <div key={a.id} className="bg-white/40 border border-tea-border px-6 py-4 flex items-center justify-between">
+                <div>
+                  <p className="font-serif text-ink">{a.nickname}</p>
+                  <p className="text-xs text-ink-light font-serif mt-1">邮箱 {a.email} · 密语 {a.password}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-lora text-ink">花瓣 {fmt(a.petals)}</p>
+                  <p className="text-xs text-ink-light font-serif mt-1">入亭 {fmtTime(a.registered_at)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white/30 border border-tea-border">
         <div className="px-6 py-4 border-b border-tea-border flex items-center gap-3">
           <IconScroll className="w-5 h-5 text-ink-light" />
           <h3 className="font-serif text-ink tracking-widest">流水账</h3>
         </div>
         <div className="divide-y divide-tea-border/50">
-          {transactions.map((t, i) => (
-            <div key={i} className="px-6 py-4 flex items-center justify-between hover:bg-white/20 transition-colors duration-300">
+          {(wallet && wallet.transactions && wallet.transactions.length > 0) ? wallet.transactions.map(t => (
+            <div key={t.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/20 transition-colors duration-300">
               <div className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${t.type === 'in' ? 'border-amber/30 text-amber bg-amber/5' : 'border-tea-border text-ink-light'}`}>
-                  {t.type === 'in' ? '+' : '-'}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${t.amount > 0 ? 'border-amber/30 text-amber bg-amber/5' : 'border-tea-border text-ink-light'}`}>
+                  {t.amount > 0 ? '+' : '-'}
                 </div>
                 <div>
-                  <p className="font-serif text-ink text-sm">{t.title}</p>
-                  <p className="text-xs text-ink-light font-serif mt-0.5">{t.date}</p>
+                  <p className="font-serif text-ink text-sm">{t.note || t.type}</p>
+                  <p className="text-xs text-ink-light font-serif mt-0.5">{t.created_at}</p>
                 </div>
               </div>
-              <span className={`font-lora font-semibold ${t.type === 'in' ? 'text-amber' : 'text-ink'}`}>{t.amount}</span>
+              <span className={`font-lora font-semibold ${t.amount > 0 ? 'text-amber' : 'text-ink'}`}>
+                {t.amount > 0 ? '+' : ''}{fmt(t.amount)}
+              </span>
             </div>
-          ))}
+          )) : (
+            <div className="px-6 py-10 text-center font-serif text-sm text-ink-light">暂无流水</div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-/* ==================== 页脚 ==================== */
-const Footer = () => (
-  <footer className="border-t border-tea-border mt-20 py-10 text-center">
-    <div className="flex items-center justify-center gap-4 mb-4">
-      <span className="h-px w-8 bg-amber/30"></span>
-      <IconPavilion className="w-5 h-5 text-ink-light/40" />
-      <span className="h-px w-8 bg-amber/30"></span>
+/* ==================== 号池监看（管理端） ==================== */
+const PoolAdminPage = () => {
+  const [stats, setStats] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState('');
+  const [platform, setPlatform] = useState('');
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+  const [chargeUid, setChargeUid] = useState('');
+  const [chargeAmt, setChargeAmt] = useState('');
+
+  const load = async () => {
+    try {
+      const sp = platform ? '?platform=' + encodeURIComponent(platform) : '';
+      const s = await api('GET', '/api/admin/chunshui/stats' + sp);
+      setStats(s);
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (platform) params.set('platform', platform);
+      if (q) params.set('q', q);
+      const qs = params.toString();
+      const d = await api('GET', '/api/admin/chunshui/accounts' + (qs ? '?' + qs : ''));
+      setAccounts(d.accounts || []);
+      const u = await api('GET', '/api/admin/users');
+      setUsers(u.users || []);
+      setErr('');
+    } catch (e) { setErr(e.message); }
+  };
+
+  useEffect(() => { load(); }, [status, q, platform]);
+
+  const platTabs = Array.from(new Set(['', ...Object.keys(PLATFORM_LABELS), ...accounts.map(a => a.platform || '')])).filter(Boolean);
+
+  const patch = async (id, body) => {
+    try { await api('PATCH', `/api/admin/chunshui/accounts/${id}`, body); setMsg('已更新'); load(); } catch (e) { setMsg(e.message); }
+  };
+  const patchUser = async (id, body) => {
+    try { await api('PATCH', `/api/admin/users/${id}`, body); setMsg('用户已更新'); load(); } catch (e) { setMsg(e.message); }
+  };
+  const charge = async () => {
+    try {
+      const d = await api('POST', '/api/admin/charge', { user_id: Number(chargeUid), amount: Number(chargeAmt), note: '亭主充值' });
+      setMsg(`充值成功，余额 ${d.balance} 枚`); setChargeUid(''); setChargeAmt('');
+    } catch (e) { setMsg(e.message); }
+  };
+
+  const card = (label, value, color) => (
+    <div className="bg-white/40 border border-tea-border p-5">
+      <p className="font-serif text-xs text-ink-light tracking-widest mb-1">{label}</p>
+      <p className={`font-lora text-2xl font-semibold ${color || 'text-ink'}`}>{fmt(value)}</p>
     </div>
-    <p className="font-serif text-xs text-ink-light/40 tracking-[0.2em]">
-      醉翁亭 · 在数字空间中重寻物与缘的流转
-    </p>
-  </footer>
-);
+  );
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+          <h2 className="font-brush text-4xl text-ink mb-2">春水号池</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">监看全部春水号的健康与花瓣，向用户充值</p>
+        </div>
+        {msg && <p className="font-serif text-sm text-amber">{msg}</p>}
+        {err && <p className="font-serif text-sm text-cinnabar">{err}</p>}
+      </div>
+
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          {card('号池总数', stats.total)}
+          {card('在售库存', stats.pool, 'text-amber')}
+          {card('已售出', stats.sold)}
+          {card('异常/掉线', stats.dead, stats.dead > 0 ? 'text-cinnabar' : 'text-ink')}
+          {card('花瓣总和', stats.totalPetals, 'text-amber')}
+          {card('今日签到', stats.signedToday, 'text-green-700')}
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setPlatform('')} className={`px-4 py-2 font-serif text-sm tracking-widest border transition-colors ${!platform ? 'bg-amber text-white border-amber' : 'border-tea-border text-ink-light hover:border-amber hover:text-amber'}`}>全部平台</button>
+          {platTabs.map(x => (
+            <button key={x} onClick={() => setPlatform(x)} className={`px-4 py-2 font-serif text-sm tracking-widest border transition-colors ${platform === x ? 'bg-amber text-white border-amber' : 'border-tea-border text-ink-light hover:border-amber hover:text-amber'}`}>{PLATFORM_LABELS[x] || x}</button>
+          ))}
+        </div>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="搜索昵称或邮箱..." className="input-scroll px-4 py-2.5 font-serif text-ink flex-1" />
+        <select value={status} onChange={e => setStatus(e.target.value)} className="input-scroll px-4 py-2.5 font-serif text-ink bg-transparent">
+          <option value="">全部状态</option>
+          <option value="pool">库存</option>
+          <option value="sold">已售</option>
+          <option value="disabled">停用</option>
+        </select>
+        <button onClick={load} className="px-6 py-2.5 border border-tea-border font-serif text-sm text-ink-light hover:border-amber hover:text-amber tracking-widest">刷新</button>
+      </div>
+
+      <div className="bg-white/30 border border-tea-border overflow-x-auto">
+        <table className="w-full text-sm font-serif">
+          <thead>
+            <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+              <th className="px-4 py-3 text-left">ID</th>
+              <th className="px-4 py-3 text-left">昵称</th>
+              <th className="px-4 py-3 text-center">平台</th>
+              <th className="px-4 py-3 text-left">密码</th>
+              <th className="px-4 py-3 text-left">邮箱/用户名</th>
+              <th className="px-4 py-3 text-right">{platform ? (PLATFORM_UNITS[platform] || '资源') : '资源量'}</th>
+              <th className="px-4 py-3 text-right">≈代币</th>
+              <th className="px-4 py-3 text-right">签到日</th>
+              <th className="px-4 py-3 text-right">签到币</th>
+              <th className="px-4 py-3 text-right">入亭</th>
+              <th className="px-4 py-3 text-right">最近检查</th>
+              <th className="px-4 py-3 text-center">状态</th>
+              <th className="px-4 py-3 text-right">售价</th>
+              <th className="px-4 py-3 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-tea-border/50">
+            {accounts.map(a => (
+              <tr key={a.id} className="hover:bg-white/20 transition-colors">
+                <td className="px-4 py-3 text-ink-light">{a.id}</td>
+                <td className="px-4 py-3 text-ink">{a.nickname}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className="px-2 py-0.5 text-xs border border-tea-border text-ink-light">{PLATFORM_LABELS[a.platform || 'aimagnet'] || a.platform}</span>
+                </td>
+                <td className="px-4 py-3 text-ink font-lora">{a.password}</td>
+                <td className="px-4 py-3 text-ink-light">{a.email || a.nickname}{a.user_id && <span className="ml-1 text-xs text-ink-light/50" title="会话令牌">·{a.user_id.slice(0,6)}</span>}</td>
+                <td className="px-4 py-3 text-right font-lora text-ink">{fmt(a.petals)}</td>
+                <td className="px-4 py-3 text-right font-lora text-amber">{fmt(Math.floor(a.petals / CONV_RATE))}</td>
+                <td className="px-4 py-3 text-right text-ink-light">{a.last_reward_date || '—'}</td>
+                <td className="px-4 py-3 text-right font-lora text-ink">{a.last_reward != null ? fmt(a.last_reward) : '—'}</td>
+                <td className="px-4 py-3 text-right text-ink-light">{fmtTime(a.registered_at)}</td>
+                <td className="px-4 py-3 text-right text-ink-light">
+                  {a.last_check_at ? a.last_check_at.slice(11) : '—'}
+                  {a.last_check_ok === 0 && <span className="ml-1 text-cinnabar">掉线</span>}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-0.5 text-xs border ${a.status === 'pool' ? 'border-amber/40 text-amber bg-amber/5' : a.status === 'sold' ? 'border-tea-border text-ink-light' : 'border-cinnabar/40 text-cinnabar'}`}>
+                    {{ pool: '库存', sold: '已售', disabled: '停用' }[a.status] || a.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {a.status === 'pool' ? (
+                    <input type="number" defaultValue={a.price} onBlur={e => { const v = Number(e.target.value); if (v !== a.price) patch(a.id, { price: v }); }}
+                      className="input-scroll w-20 px-2 py-1 font-lora text-right" />
+                  ) : <span className="text-ink-light">{fmt(a.price)}</span>}
+                </td>
+                <td className="px-4 py-3 text-center whitespace-nowrap">
+                  {a.status === 'pool' ? (
+                    <button onClick={() => patch(a.id, { status: 'disabled' })} className="text-xs text-ink-light border border-tea-border px-2 py-1 hover:text-cinnabar hover:border-cinnabar/50 tracking-wider">停用</button>
+                  ) : a.status === 'disabled' ? (
+                    <button onClick={() => patch(a.id, { status: 'pool' })} className="text-xs text-amber border border-amber/40 px-2 py-1 tracking-wider">上架</button>
+                  ) : <span className="text-ink-light text-xs">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {accounts.length === 0 && <div className="px-6 py-12 text-center font-serif text-sm text-ink-light">无匹配账号</div>}
+      </div>
+
+      <div className="mt-8 bg-white/40 border border-tea-border p-6 max-w-lg">
+        <h3 className="font-brush text-2xl text-ink mb-4">给用户充值代币</h3>
+        <div className="flex gap-3 flex-wrap">
+          <input value={chargeUid} onChange={e => setChargeUid(e.target.value)} placeholder="用户 ID" className="input-scroll px-4 py-2.5 font-serif w-32" />
+          <input value={chargeAmt} onChange={e => setChargeAmt(e.target.value)} placeholder="代币数量" type="number" className="input-scroll px-4 py-2.5 font-serif w-36" />
+          <button onClick={charge} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">充值</button>
+        </div>
+        <p className="font-serif text-xs text-ink-light mt-4">新号入库：前往 GitHub 仓库 qingshanjiluo/zuiweng 手动触发 chunshui-register workflow。</p>
+      </div>
+
+      <div className="mt-10">
+        <h3 className="font-brush text-3xl text-ink mb-4">用户管理</h3>
+        <div className="bg-white/30 border border-tea-border overflow-x-auto">
+          <table className="w-full text-sm font-serif">
+            <thead>
+              <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+                <th className="px-4 py-3 text-left">ID</th>
+                <th className="px-4 py-3 text-left">名号</th>
+                <th className="px-4 py-3 text-center">身份</th>
+                <th className="px-4 py-3 text-right">余钱</th>
+                <th className="px-4 py-3 text-right">购号数</th>
+                <th className="px-4 py-3 text-right">入亭</th>
+                <th className="px-4 py-3 text-center">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-tea-border/50">
+              {users.map(u => (
+                <tr key={u.id} className="hover:bg-white/20 transition-colors">
+                  <td className="px-4 py-3 text-ink-light">{u.id}</td>
+                  <td className="px-4 py-3 text-ink">{u.username}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`px-2 py-0.5 text-xs border ${u.role === 'admin' ? 'border-cinnabar/40 text-cinnabar bg-cinnabar/5' : 'border-tea-border text-ink-light'}`}>
+                      {u.role === 'admin' ? '管理员' : '游客'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <input type="number" defaultValue={u.balance} onBlur={e => { const v = Number(e.target.value); if (v !== u.balance) patchUser(u.id, { balance: v }); }}
+                      className="input-scroll w-24 px-2 py-1 font-lora text-right" />
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink">{u.purchased}</td>
+                  <td className="px-4 py-3 text-right text-ink-light">{fmtTime(u.created_at)}</td>
+                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                    {u.role === 'admin' ? (
+                      <button onClick={() => patchUser(u.id, { role: 'user' })} className="text-xs text-ink-light border border-tea-border px-2 py-1 hover:text-cinnabar tracking-wider">降权</button>
+                    ) : (
+                      <button onClick={() => patchUser(u.id, { role: 'admin' })} className="text-xs text-cinnabar border border-cinnabar/40 px-2 py-1 hover:bg-cinnabar/5 tracking-wider">提权</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {users.length === 0 && <div className="px-6 py-12 text-center font-serif text-sm text-ink-light">暂无用户</div>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 渠道报错 (admin) ==================== */
+const ChannelLogsAdminPage = () => {
+  const [logs, setLogs] = useState([]);
+  const [plat, setPlat] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = () => {
+    api('GET', '/api/admin/channel-logs' + (plat ? '?platform=' + encodeURIComponent(plat) : ''))
+      .then(d => setLogs(d.logs || []))
+      .catch(e => setErr(e.message));
+  };
+  useEffect(() => { load(); }, [plat]);
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+          <h2 className="font-brush text-4xl text-ink mb-2">渠道报错</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">注册 / 签到 / 登录 失败的详细原因，由 GitHub Actions 实时上报</p>
+        </div>
+        <select value={plat} onChange={e => setPlat(e.target.value)}
+          className="input-scroll px-4 py-2.5 font-serif">
+          <option value="">全部平台</option>
+          {Object.entries(PLATFORM_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
+      <div className="bg-white/30 border border-tea-border overflow-x-auto">
+        <table className="w-full text-sm font-serif">
+          <thead>
+            <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+              <th className="px-4 py-3 text-left">平台</th>
+              <th className="px-4 py-3 text-center">类型</th>
+              <th className="px-4 py-3 text-left">报错详情</th>
+              <th className="px-4 py-3 text-right">时间</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-tea-border/50">
+            {logs.map(l => (
+              <tr key={l.id} className="hover:bg-white/20 transition-colors align-top">
+                <td className="px-4 py-3 whitespace-nowrap">{PLATFORM_LABELS[l.platform] || l.platform}</td>
+                <td className="px-4 py-3 text-center whitespace-nowrap">
+                  <span className={`px-2 py-0.5 text-xs border ${l.category === 'login' ? 'border-cinnabar/40 text-cinnabar bg-cinnabar/5' : 'border-tea-border text-ink-light'}`}>
+                    {{ register: '注册', daily: '签到', login: '登录' }[l.category] || l.category}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-ink break-all">{l.message}</td>
+                <td className="px-4 py-3 text-right text-ink-light whitespace-nowrap">{fmtTime(l.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {logs.length === 0 && <div className="px-6 py-12 text-center font-serif text-sm text-ink-light">暂无报错记录</div>}
+      </div>
+    </div>
+  );
+};
 
 /* ==================== App ==================== */
 const App = () => {
   const [currentPage, setPage] = useState('home');
+  const [pageParam, setPageParam] = useState(null);
+  const [user, setUser] = useState(getUser());
 
-  // 页面切换时滚动到顶部
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentPage]);
+  const go = (page, param) => { setPage(page); setPageParam(param); };
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [currentPage]);
+
+  const onAuthed = (u) => { setUser(u); refreshUser(); setPage('home'); };
+  const onLogout = () => { localStorage.removeItem('zw_token'); localStorage.removeItem('zw_user'); setUser(null); setPage('home'); };
+  const refreshUser = () => {
+    if (getToken()) api('GET', '/api/wallet').then(d => { localStorage.setItem('zw_user', JSON.stringify(d.user)); setUser(d.user); }).catch(() => {});
+  };
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'home': return <HomePage setPage={setPage} />;
-      case 'list': return <ProductListPage setPage={setPage} />;
-      case 'detail': return <ProductDetailPage setPage={setPage} />;
-      case 'publish': return <PublishPage setPage={setPage} />;
-      case 'wallet': return <WalletPage setPage={setPage} />;
-      default: return <HomePage setPage={setPage} />;
+      case 'login': return <LoginPage onAuthed={onAuthed} />;
+      case 'home': return <HomePage setPage={go} user={user} />;
+      case 'list': return <ProductListPage setPage={go} user={user} onBuy={refreshUser} />;
+      case 'detail': return <ProductDetailPage id={pageParam && pageParam.id} setPage={go} user={user} onBuy={refreshUser} />;
+      case 'wallet': return <WalletPage user={user} setPage={go} />;
+      case 'pool': return <PoolAdminPage />;
+      case 'chlogs': return <ChannelLogsAdminPage />;
+      default: return <HomePage setPage={go} user={user} />;
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar currentPage={currentPage} setPage={setPage} />
-      <main className="flex-1">
-        {renderPage()}
-      </main>
-      <Footer />
+      <Navbar currentPage={currentPage} setPage={go} user={user} onLogout={onLogout} />
+      <main className="flex-1">{renderPage()}</main>
+      <footer className="border-t border-tea-border mt-20 py-10 text-center">
+        <div className="flex items-center justify-center gap-4 mb-4">
+          <span className="h-px w-8 bg-amber/30"></span>
+          <IconPavilion className="w-5 h-5 text-ink-light/40" />
+          <span className="h-px w-8 bg-amber/30"></span>
+        </div>
+        <p className="font-serif text-xs text-ink-light/40 tracking-[0.2em]">醉翁亭 · 春水雅集 · GitHub Actions × Cloudflare D1</p>
+      </footer>
     </div>
   );
 };

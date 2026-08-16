@@ -1,0 +1,10 @@
+name = "zuiweng-api"
+main = "src/index.js"
+compatibility_date = "2026-08-16"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "zuiweng-db"
+database_id = "a1a15aa6-57c0-4b64-b595-614d5372ac7a"
+
+# secrets: JWT_SECRET, ADMIN_TOKEN
