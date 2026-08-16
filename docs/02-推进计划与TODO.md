@@ -140,11 +140,15 @@
 - [x] 验收: 用户下单（RCMSVSJPEH8GOV 待审核）-> 管理员确认到账 -> 余额 2500+1000=3500 -> 交易记录出现 charge 1000 充值订单
 - [x] 部署与提交: Worker 已 deploy（e39a274d），Pages 已发布，commit 130b813 已推送
 
-## 阶段 3: 脚本/皮肤市场 + 玩家市场
+## 阶段 3: 脚本/皮肤市场 + 玩家市场 — 已完成
 
-- [ ] 脚本/皮肤: 表 products(type,name,desc,price,file_url,thumbnail,platform)；API 上架/列表/购买；前端页面完成
-- [ ] 玩家市场: 细化数据模型（玩家卡/求购/交易），设计后实现
-- [ ] 验收: 两类市场可浏览购买
+- [x] 后端: schema 新增 products 表（type=script/skin, name, desc, price, file_url, thumbnail, platform, active, sold）+ player_offers 表（user_id, title, desc, kind=sell/buy, price, status=open/closed）
+  - 公开: `GET /api/script-products`（?type=）、`GET /api/player-offers`（open 列表含发布人）
+  - 登录: `POST /api/script-orders`（扣代币+sold+1+记流水 buy）、`POST /api/player-offers`（发布）、`GET /api/player-offers/mine`、`PATCH /api/player-offers/:id`（本人或管理员关闭）
+  - 管理: `GET/POST /api/admin/products`、`PATCH/DELETE /api/admin/products/:id`
+- [x] 前端: ScriptsPage（全部/脚本/皮肤 tab + 商品卡 + 确认购取 + 购得弹窗含下载链接，余额不足跳充值）；PlayersPage（当前发布 + 我要发布表单 + 我的发布关闭）；ProductsAdminPage（上架表单 + 行内编辑/上下架/删除）；导航加"商品管理"
+- [x] 验收: 管理员上架 2 商品 -> 脚本皮肤市场可见 -> 购买自动签到脚本扣 50 代币并展示下载链接 -> 发布"出售密丝180体验点号"成功 -> 关闭后我的发布减 1 -> 商品管理页行内编辑/上下架/删除可用
+- [x] 部署与提交: Worker 已 deploy（7fe9a6ed），Pages 已发布，commit ab097ac 已推送
 
 ## 阶段 4: 聊天室
 
