@@ -176,8 +176,10 @@ export default {
         summary.total += pl.total; summary.on_sale += pl.on_sale; summary.sold += pl.sold;
         summary.dead += pl.dead; summary.total_petals += pl.total_petals; summary.signed_today += pl.signed_today;
       }
-      const st = await DB.prepare("SELECT value FROM settings WHERE key='token_per_rmb'").first();
-      return ok({ platforms, summary, token_per_rmb: Number(st?.value) || 100 });
+      const st = await DB.prepare("SELECT key,value FROM settings WHERE key IN('token_per_rmb','qq_group')").all();
+      const setMap = {};
+      for (const r of st.results) setMap[r.key] = r.value;
+      return ok({ platforms, summary, token_per_rmb: Number(setMap.token_per_rmb) || 100, qq_group: setMap.qq_group || '' });
     }
 
     // 渠道报错上报 (Actions 用 ADMIN_TOKEN)
@@ -230,6 +232,29 @@ export default {
       }
       const invited = await DB.prepare('SELECT COUNT(*) n FROM invite_relations WHERE inviter_id=?').bind(auth.uid).first();
       return ok({ invite_code: ic.code, invited: invited.n || 0 });
+    }
+
+    // 充值下单 (登录)
+    if (p === '/api/recharge' && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const b = await json(req);
+      const rmb = Number(b.amount_rmb);
+      if (!rmb || rmb < 1 || rmb > 10000) return err(4001, '金额不合法');
+      const bonus = Math.max(0, Number(b.bonus) || 0);
+      const st = await DB.prepare("SELECT value FROM settings WHERE key='token_per_rmb'").first();
+      const rate = Number(st?.value) || 100;
+      const tokenAmount = rmb * rate + bonus;
+      const no = 'RC' + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1e6).toString(36).toUpperCase();
+      const r = await DB.prepare('INSERT INTO recharge_orders(order_no,user_id,amount_rmb,bonus,token_amount,note) VALUES(?,?,?,?,?,?)')
+        .bind(no, auth.uid, rmb, bonus, tokenAmount, String(b.note || '').slice(0, 200)).run();
+      return ok({ id: r.meta.last_row_id, order_no: no, amount_rmb: rmb, token_amount: tokenAmount, rate });
+    }
+
+    // 我的充值订单 (登录)
+    if (p === '/api/recharge/orders' && method === 'GET') {
+      if (!auth) return err(4010, '未登录', 401);
+      const rows = await DB.prepare('SELECT * FROM recharge_orders WHERE user_id=? ORDER BY id DESC LIMIT 30').bind(auth.uid).all();
+      return ok({ orders: rows.results });
     }
 
     // 购买账号
@@ -422,7 +447,44 @@ export default {
         if (!Number.isFinite(n) || n <= 0) return err(4001, 'token_per_rmb 非法');
         await DB.prepare("INSERT INTO settings(key,value) VALUES('token_per_rmb',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String(n)).run();
       }
+      if (b.qq_group !== undefined) {
+        const s = String(b.qq_group).trim();
+        if (!s || s.length > 100) return err(4001, 'qq_group 非法');
+        await DB.prepare("INSERT INTO settings(key,value) VALUES('qq_group',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(s).run();
+      }
       return ok({ updated: true });
+    }
+
+    // ============ 充值订单 (admin 查看/审核) ============
+    if (p === '/api/admin/orders' && method === 'GET') {
+      const sp = new URL(req.url).searchParams;
+      const st = sp.get('status') || '';
+      let sql = 'SELECT o.*, u.username FROM recharge_orders o LEFT JOIN users u ON u.id=o.user_id';
+      const vals = [];
+      if (st) { sql += ' WHERE o.status=?'; vals.push(st); }
+      sql += ' ORDER BY o.id DESC LIMIT 100';
+      const rows = await DB.prepare(sql).bind(...vals).all();
+      return ok({ orders: rows.results });
+    }
+    const mOrd = p.match(/^\/api\/admin\/orders\/(\d+)$/);
+    if (mOrd && method === 'PATCH') {
+      const b = await json(req);
+      const ord = await DB.prepare('SELECT * FROM recharge_orders WHERE id=?').bind(mOrd[1]).first();
+      if (!ord) return err(4004, '订单不存在');
+      if (ord.status !== 'pending') return err(4004, '订单已处理');
+      if (b.status === 'done') {
+        await DB.batch([
+          DB.prepare('UPDATE users SET balance=balance+? WHERE id=?').bind(ord.token_amount, ord.user_id),
+          DB.prepare("UPDATE recharge_orders SET status='done', handled_by=?, handled_at=datetime('now','localtime') WHERE id=?").bind(auth?.uid || null, ord.id),
+          DB.prepare("INSERT INTO transactions(user_id,amount,type,note) VALUES(?,?,?,?)").bind(ord.user_id, ord.token_amount, 'charge', `充值订单 ${ord.order_no} 到账`),
+        ]);
+        return ok({ token_amount: ord.token_amount });
+      }
+      if (b.status === 'rejected') {
+        await DB.prepare("UPDATE recharge_orders SET status='rejected', handled_by=?, handled_at=datetime('now','localtime') WHERE id=?").bind(auth?.uid || null, ord.id).run();
+        return ok({ rejected: true });
+      }
+      return err(4001, 'status 非法');
     }
 
     // ============ 通知 (admin CRUD) ============

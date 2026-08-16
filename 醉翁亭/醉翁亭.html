@@ -82,6 +82,8 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #E0D6C8; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #C49B6C; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
 ::selection { background: rgba(196,155,108,0.25); color: #2C2A28; }
 </style>
 <script>
@@ -217,7 +219,7 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
     { id: 'me', label: '用户中心' },
     { id: 'recharge', label: '充值' },
     { id: 'invite', label: '邀请' },
-    ...(isAdmin ? [{ id: 'pool', label: '号池监看' }, { id: 'chlogs', label: '渠道报错' }, { id: 'admin-channels', label: '渠道管理' }, { id: 'admin-notices', label: '通知管理' }, { id: 'admin-settings', label: '系统设置' }] : []),
+    ...(isAdmin ? [{ id: 'pool', label: '号池监看' }, { id: 'orders', label: '充值订单' }, { id: 'chlogs', label: '渠道报错' }, { id: 'admin-channels', label: '渠道管理' }, { id: 'admin-notices', label: '通知管理' }, { id: 'admin-settings', label: '系统设置' }] : []),
   ];
   return (
     <nav className="sticky top-0 z-50 bg-rice/80 backdrop-blur-md border-b border-tea-border">
@@ -230,7 +232,7 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
           <span className="font-brush text-2xl text-ink tracking-widest group-hover:text-amber transition-colors duration-500">醉翁亭</span>
         </button>
 
-        <div className="hidden lg:flex items-center gap-4">
+        <div className="hidden lg:flex items-center gap-4 overflow-x-auto no-scrollbar">
           {navItems.map(item => (
             <button key={item.id} onClick={() => setPage(item.id)}
               className={`relative font-serif text-[13px] tracking-widest transition-colors duration-300 whitespace-nowrap ${currentPage === item.id ? 'text-amber' : 'text-ink-light hover:text-ink'}`}>
@@ -1136,7 +1138,7 @@ const MarketPage = ({ setPage, user, onBuy }) => {
 };
 
 /* ==================== 用户中心 ==================== */
-const MePage = ({ user, setPage }) => {
+const MePage = ({ user, setPage, onRefresh }) => {
   const [wallet, setWallet] = useState(null);
   const [mine, setMine] = useState([]);
   const [err, setErr] = useState('');
@@ -1145,7 +1147,7 @@ const MePage = ({ user, setPage }) => {
 
   useEffect(() => {
     if (!user) return;
-    api('GET', '/api/wallet').then(setWallet).catch(e => setErr(e.message));
+    api('GET', '/api/wallet').then(d => { setWallet(d); if (onRefresh) onRefresh(d.user); }).catch(e => setErr(e.message));
     api('GET', '/api/accounts/mine').then(d => setMine(d.accounts || [])).catch(() => {});
   }, [user]);
 
@@ -1248,13 +1250,32 @@ const MePage = ({ user, setPage }) => {
 /* ==================== 充值 ==================== */
 const RechargePage = ({ user, setPage }) => {
   const [rate, setRate] = useState(100);
+  const [qq, setQq] = useState(QQ_GROUP);
+  const [orders, setOrders] = useState([]);
+  const [created, setCreated] = useState(null);
   const [copied, setCopied] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ST = { pending: '待审核', done: '已到账', rejected: '已拒绝' };
 
-  useEffect(() => { api('GET', '/api/stats').then(d => setRate(d.token_per_rmb || 100)).catch(() => {}); }, []);
+  const load = () => {
+    api('GET', '/api/stats').then(d => { setRate(d.token_per_rmb || 100); if (d.qq_group) setQq(d.qq_group); }).catch(() => {});
+    if (user) api('GET', '/api/recharge/orders').then(d => setOrders(d.orders || [])).catch(() => {});
+  };
+  useEffect(() => { load(); }, [user]);
 
-  const note = (pkg) => `[充值] 醉翁亭 用户ID ${user ? user.id : '?'} (${user ? user.username : ''})，购买 ${pkg.rmb} 元套餐，应到账 ${pkg.rmb * rate + pkg.bonus} 代币`;
-  const copy = (pkg) => {
-    navigator.clipboard.writeText(note(pkg)).then(() => { setCopied(String(pkg.rmb)); setTimeout(() => setCopied(''), 2000); }).catch(() => {});
+  const createOrder = async (pkg) => {
+    setBusy(true); setErr('');
+    try {
+      const d = await api('POST', '/api/recharge', { amount_rmb: pkg.rmb, bonus: pkg.bonus });
+      setCreated(d);
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(''), 2000); }).catch(() => {});
   };
 
   if (!user) {
@@ -1266,10 +1287,28 @@ const RechargePage = ({ user, setPage }) => {
     );
   }
 
+  const note = (o) => `[充值] 醉翁亭 用户ID ${user.id} (${user.username})，订单 ${o.order_no}，${o.amount_rmb} 元套餐，应到账 ${o.token_amount} 代币`;
+
   return (
     <div className="page-enter max-w-4xl mx-auto px-6 py-10">
       <h2 className="font-brush text-4xl text-ink mb-2">充值</h2>
-      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">1 元 = {rate} 代币，付款后联系 {QQ_GROUP} 管理员审核到账</p>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">1 元 = {rate} 代币，生成订单后联系 {qq} 管理员审核到账</p>
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
+
+      {created && (
+        <div className="card-deckle bg-bamboo/40 border border-tea-border p-6 mb-8">
+          <h3 className="font-serif text-ink mb-3">订单已生成，待审核</h3>
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between"><span className="text-sm text-ink-light font-serif">订单号</span><span className="font-serif text-ink break-all text-right">{created.order_no}</span></div>
+            <div className="flex justify-between"><span className="text-sm text-ink-light font-serif">金额</span><span className="font-serif text-ink">{created.amount_rmb} 元</span></div>
+            <div className="flex justify-between"><span className="text-sm text-ink-light font-serif">应到账</span><span className="font-lora text-amber">{fmt(created.token_amount)} 代币</span></div>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <button onClick={() => copy(note(created), 'note')} className="px-5 py-2.5 border border-tea-border font-serif text-sm text-ink-light hover:border-amber hover:text-amber transition-colors">{copied === 'note' ? '已复制备注' : '复制订单备注'}</button>
+            <button onClick={() => setCreated(null)} className="px-5 py-2.5 font-serif text-sm text-ink-light hover:text-ink">关闭</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         {RECHARGE_PACKAGES.map(pkg => (
@@ -1278,20 +1317,54 @@ const RechargePage = ({ user, setPage }) => {
             <p className="font-lora text-lg text-amber my-3">{fmt(pkg.rmb * rate + pkg.bonus)} 代币</p>
             {pkg.bonus > 0 && <p className="font-serif text-xs text-cinnabar mb-3">附赠 {pkg.bonus} 代币</p>}
             {pkg.bonus === 0 && <p className="font-serif text-xs text-ink-light/40 mb-3">无附赠</p>}
-            <button onClick={() => copy(pkg)} className="w-full py-2.5 border border-tea-border font-serif text-sm text-ink-light hover:border-amber hover:text-amber transition-colors">
-              {copied === String(pkg.rmb) ? '已复制备注' : '复制充值备注'}
+            <button onClick={() => createOrder(pkg)} disabled={busy} className="w-full py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60">
+              {busy ? '下单中...' : '生成订单'}
             </button>
           </div>
         ))}
       </div>
 
-      <div className="card-deckle bg-white/40 border border-tea-border p-6">
+      <div className="card-deckle bg-white/40 border border-tea-border p-6 mb-10">
         <h3 className="font-serif text-ink mb-3">充值流程</h3>
         <ol className="font-serif text-sm text-ink-light space-y-2 list-decimal list-inside">
-          <li>选择套餐，点击"复制充值备注"</li>
-          <li>向 {QQ_GROUP} 群内管理员付款并粘贴备注</li>
-          <li>管理员审核后，代币自动到账（可在用户中心查看流水）</li>
+          <li>选择套餐，点击"生成订单"</li>
+          <li>复制订单备注，向 {qq} 群内管理员付款并粘贴备注</li>
+          <li>管理员审核通过后，代币自动到账（可在下方与用户中心查看流水）</li>
         </ol>
+      </div>
+
+      <div>
+        <h3 className="font-brush text-2xl text-ink mb-4">我的充值订单</h3>
+        {orders.length === 0 ? (
+          <div className="card-deckle bg-white/30 border border-tea-border p-8 text-center font-serif text-sm text-ink-light">暂无充值订单</div>
+        ) : (
+          <div className="bg-white/30 border border-tea-border overflow-x-auto">
+            <table className="w-full text-sm font-serif">
+              <thead>
+                <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+                  <th className="px-4 py-3 text-left">订单号</th>
+                  <th className="px-4 py-3 text-right">金额</th>
+                  <th className="px-4 py-3 text-right">应到账</th>
+                  <th className="px-4 py-3 text-center">状态</th>
+                  <th className="px-4 py-3 text-right">时间</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-tea-border/50">
+                {orders.map(o => (
+                  <tr key={o.id}>
+                    <td className="px-4 py-3 text-ink break-all">{o.order_no}</td>
+                    <td className="px-4 py-3 text-right font-lora">{o.amount_rmb} 元</td>
+                    <td className="px-4 py-3 text-right font-lora text-amber">{fmt(o.token_amount)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 text-xs border ${o.status === 'done' ? 'border-amber/40 text-amber' : o.status === 'rejected' ? 'border-cinnabar/40 text-cinnabar' : 'border-tea-border text-ink-light'}`}>{ST[o.status] || o.status}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-ink-light">{fmtTime(o.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1486,32 +1559,114 @@ const NoticesAdminPage = () => {
 const SettingsAdminPage = () => {
   const [rate, setRate] = useState(100);
   const [input, setInput] = useState('100');
+  const [qq, setQq] = useState('');
+  const [qqInput, setQqInput] = useState('');
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
-    api('GET', '/api/admin/settings').then(d => { setRate(Number(d.token_per_rmb) || 100); setInput(String(d.token_per_rmb || 100)); }).catch(e => setMsg(e.message));
+    api('GET', '/api/admin/settings').then(d => {
+      setRate(Number(d.token_per_rmb) || 100); setInput(String(d.token_per_rmb || 100));
+      setQq(d.qq_group || ''); setQqInput(d.qq_group || '');
+    }).catch(e => setMsg(e.message));
   }, []);
 
   const save = async () => {
     const v = Number(input);
     if (!v || v < 1) { setMsg('请输入有效汇率'); return; }
     setMsg('');
-    try { await api('PATCH', '/api/admin/settings', { token_per_rmb: v }); setRate(v); setMsg('汇率已保存'); }
-    catch (e) { setMsg(e.message); }
+    try {
+      await api('PATCH', '/api/admin/settings', { token_per_rmb: v, qq_group: qqInput.trim() || '充值群' });
+      setRate(v); setQq(qqInput.trim() || '充值群'); setMsg('设置已保存');
+    } catch (e) { setMsg(e.message); }
   };
 
   return (
     <div className="page-enter max-w-2xl mx-auto px-6 py-10">
       <h2 className="font-brush text-4xl text-ink mb-8">系统设置</h2>
       {msg && <p className="font-serif text-sm text-ink mb-6">{msg}</p>}
-      <div className="card-deckle bg-white/50 border border-tea-border p-6">
-        <h3 className="font-serif text-ink mb-3">代币汇率</h3>
-        <p className="font-serif text-sm text-ink-light mb-4">当前：1 元 = {rate} 代币</p>
-        <div className="flex gap-3">
+      <div className="card-deckle bg-white/50 border border-tea-border p-6 space-y-6">
+        <div>
+          <h3 className="font-serif text-ink mb-3">代币汇率</h3>
+          <p className="font-serif text-sm text-ink-light mb-4">当前：1 元 = {rate} 代币</p>
           <input type="number" value={input} onChange={e => setInput(e.target.value)} className="input-scroll px-4 py-2.5 font-serif w-40" />
-          <button onClick={save} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">保存</button>
         </div>
-        <p className="font-serif text-xs text-ink-light mt-4">示例：10 元套餐将到账 {10 * rate} 代币</p>
+        <div>
+          <h3 className="font-serif text-ink mb-3">充值群</h3>
+          <p className="font-serif text-sm text-ink-light mb-4">当前：{qq || '充值群'}</p>
+          <input value={qqInput} onChange={e => setQqInput(e.target.value)} placeholder="充值群名称/号码" className="input-scroll px-4 py-2.5 font-serif w-full" />
+        </div>
+        <button onClick={save} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">保存设置</button>
+        <p className="font-serif text-xs text-ink-light">示例：10 元套餐将到账 {10 * rate} 代币</p>
+      </div>
+    </div>
+  );
+};
+
+/* ==================== 充值订单管理 (admin) ==================== */
+const OrdersAdminPage = () => {
+  const [orders, setOrders] = useState([]);
+  const [st, setSt] = useState('pending');
+  const [msg, setMsg] = useState('');
+  const ST = { pending: '待审核', done: '已到账', rejected: '已拒绝' };
+
+  const load = () => api('GET', '/api/admin/orders' + (st ? '?status=' + st : '')).then(d => setOrders(d.orders || [])).catch(e => setMsg(e.message));
+  useEffect(() => { load(); }, [st]);
+
+  const handle = async (id, status) => {
+    setMsg('');
+    try { const d = await api('PATCH', `/api/admin/orders/${id}`, { status }); setMsg(status === 'done' ? `已到账 ${d.token_amount} 代币` : '已拒绝'); load(); }
+    catch (e) { setMsg(e.message); }
+  };
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+          <h2 className="font-brush text-4xl text-ink mb-2">充值订单</h2>
+          <p className="font-serif text-sm text-ink-light tracking-widest">用户下单后人工审核，通过即自动发放代币</p>
+        </div>
+        <select value={st} onChange={e => setSt(e.target.value)} className="input-scroll px-4 py-2.5 font-serif">
+          {Object.entries(ST).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+      {msg && <p className="font-serif text-sm text-ink mb-6">{msg}</p>}
+      <div className="bg-white/30 border border-tea-border overflow-x-auto">
+        <table className="w-full text-sm font-serif">
+          <thead>
+            <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+              <th className="px-4 py-3 text-left">订单号</th>
+              <th className="px-4 py-3 text-left">用户</th>
+              <th className="px-4 py-3 text-right">金额</th>
+              <th className="px-4 py-3 text-right">应到账</th>
+              <th className="px-4 py-3 text-center">状态</th>
+              <th className="px-4 py-3 text-right">下单时间</th>
+              <th className="px-4 py-3 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-tea-border/50">
+            {orders.map(o => (
+              <tr key={o.id} className="hover:bg-white/20 transition-colors align-middle">
+                <td className="px-4 py-3 text-ink break-all">{o.order_no}</td>
+                <td className="px-4 py-3 whitespace-nowrap">{o.username || ('#' + o.user_id)}</td>
+                <td className="px-4 py-3 text-right font-lora">{o.amount_rmb} 元</td>
+                <td className="px-4 py-3 text-right font-lora text-amber">{fmt(o.token_amount)}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-0.5 text-xs border ${o.status === 'done' ? 'border-amber/40 text-amber' : o.status === 'rejected' ? 'border-cinnabar/40 text-cinnabar' : 'border-tea-border text-ink-light'}`}>{ST[o.status] || o.status}</span>
+                </td>
+                <td className="px-4 py-3 text-right text-ink-light whitespace-nowrap">{fmtTime(o.created_at)}</td>
+                <td className="px-4 py-3 text-center whitespace-nowrap">
+                  {o.status === 'pending' && (
+                    <div className="flex gap-2 justify-center">
+                      <button onClick={() => handle(o.id, 'done')} className="px-3 py-1.5 text-xs font-serif bg-amber text-white hover:bg-amber/90 tracking-wider">确认到账</button>
+                      <button onClick={() => handle(o.id, 'rejected')} className="px-3 py-1.5 text-xs font-serif border border-cinnabar/40 text-cinnabar hover:bg-cinnabar/5 tracking-wider">拒绝</button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {orders.length === 0 && <div className="px-6 py-12 text-center font-serif text-sm text-ink-light">暂无订单</div>}
       </div>
     </div>
   );
@@ -1537,7 +1692,7 @@ const App = () => {
       case 'login': return <LoginPage onAuthed={onAuthed} />;
       case 'home': return <HomePage setPage={go} user={user} />;
       case 'market': return <MarketPage setPage={go} user={user} onBuy={refreshUser} />;
-      case 'me': return <MePage user={user} setPage={go} />;
+      case 'me': return <MePage user={user} setPage={go} onRefresh={refreshUser} />;
       case 'recharge': return <RechargePage user={user} setPage={go} />;
       case 'invite': return <InvitePage user={user} />;
       case 'scripts': return <PlaceholderPage title="脚本与皮肤" desc="各路脚本、皮肤与行囊，皆可在此寻得" />;
@@ -1548,6 +1703,7 @@ const App = () => {
       case 'wallet': return <WalletPage user={user} setPage={go} />;
       case 'pool': return <PoolAdminPage />;
       case 'chlogs': return <ChannelLogsAdminPage />;
+      case 'orders': return <OrdersAdminPage />;
       case 'admin-channels': return <ChannelsAdminPage />;
       case 'admin-notices': return <NoticesAdminPage />;
       case 'admin-settings': return <SettingsAdminPage />;

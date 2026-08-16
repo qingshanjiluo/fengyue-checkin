@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 INSERT OR IGNORE INTO settings(key,value) VALUES('token_per_rmb','100');
+INSERT OR IGNORE INTO settings(key,value) VALUES('qq_group','充值群');
 INSERT OR IGNORE INTO channel_configs(platform,label,enabled,min_petals,unit,price_per_unit)
   VALUES('fengyue','风月酒馆',0,100,100,50);
 INSERT OR IGNORE INTO channel_configs(platform,label,enabled,min_petals,unit,price_per_unit)
@@ -137,3 +138,19 @@ CREATE TABLE IF NOT EXISTS channel_logs (
   created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_chlog ON channel_logs(platform, id);
+
+-- 充值订单 (用户下单 -> 管理员审核发放)
+CREATE TABLE IF NOT EXISTS recharge_orders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_no    TEXT UNIQUE,
+  user_id     INTEGER NOT NULL,
+  amount_rmb  INTEGER NOT NULL,        -- 人民币金额
+  bonus       INTEGER DEFAULT 0,       -- 附赠代币
+  token_amount INTEGER NOT NULL,       -- 应发放代币 = amount_rmb*汇率 + bonus
+  status      TEXT DEFAULT 'pending',  -- pending | done | rejected
+  note        TEXT,
+  handled_by  INTEGER,
+  handled_at  TEXT,
+  created_at  TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(user_id, status);
