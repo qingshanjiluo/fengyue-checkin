@@ -183,3 +183,12 @@ CREATE TABLE IF NOT EXISTS player_offers (
   created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_offers_status ON player_offers(status, id);
+
+-- 聊天室消息
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  content    TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_chat_msg ON chat_messages(id);

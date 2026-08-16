@@ -357,6 +357,27 @@ export default {
       return ok({ signs: signs.results, points: points.results });
     }
 
+    // ============ 聊天室 ============
+    if (p === '/api/chat/messages' && method === 'GET') {
+      if (!auth) return err(4010, '未登录', 401);
+      const sp = new URL(req.url).searchParams;
+      const after = Number(sp.get('after')) || 0;
+      let sql = 'SELECT m.id,m.user_id,m.content,m.created_at,u.username FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id';
+      const vals = [];
+      if (after > 0) { sql += ' WHERE m.id>?'; vals.push(after); }
+      sql += ' ORDER BY m.id DESC LIMIT 100';
+      const rows = await DB.prepare(sql).bind(...vals).all();
+      return ok({ messages: rows.results.reverse() });
+    }
+    if (p === '/api/chat/messages' && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const b = await json(req);
+      const content = String(b.content || '').trim();
+      if (!content || content.length > 500) return err(4001, '消息内容必填且不超过 500 字');
+      const r = await DB.prepare('INSERT INTO chat_messages(user_id,content) VALUES(?,?)').bind(auth.uid, content).run();
+      return ok({ id: r.meta.last_row_id, content, username: auth.username });
+    }
+
     // ============ 管理端 (admin 或 ADMIN_TOKEN) ============
     const isAdmin = (auth && auth.role === 'admin') || adminTokenHit;
 

@@ -104,7 +104,7 @@ tailwind.config = {
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
 /* ==================== API ==================== */
 const API = 'https://zuiweng-api.sifangzhiji.workers.dev';
@@ -1969,6 +1969,123 @@ const ProductsAdminPage = () => {
   );
 };
 
+/* ==================== 聊天室 ==================== */
+const ChatPage = ({ user, setPage }) => {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const lastId = useRef(0);
+  const listRef = useRef(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api('GET', '/api/chat/messages' + (lastId.current > 0 ? '?after=' + lastId.current : ''));
+      if (d.messages && d.messages.length > 0) {
+        setMessages(prev => {
+          const existing = new Set(prev.map(m => m.id));
+          const newMsgs = d.messages.filter(m => !existing.has(m.id));
+          const merged = [...prev, ...newMsgs];
+          lastId.current = Math.max(lastId.current, ...merged.map(m => m.id));
+          return merged;
+        });
+      }
+    } catch (e) { setErr(e.message); }
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    load();
+    const timer = setInterval(load, 3000);
+    return () => clearInterval(timer);
+  }, [user, load]);
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [messages]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text) return;
+    setBusy(true); setErr('');
+    try {
+      await api('POST', '/api/chat/messages', { content: text });
+      setInput('');
+      await load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const handleKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+
+  if (!user) {
+    return (
+      <div className="page-enter max-w-md mx-auto px-6 py-20 text-center">
+        <p className="font-serif text-ink-light tracking-widest mb-6">请先登栈再进入聊天室</p>
+        <button onClick={() => setPage('login')} className="px-8 py-2.5 bg-amber text-white font-serif tracking-widest">去登栈</button>
+      </div>
+    );
+  }
+
+  const fmtChatTime = (t) => {
+    if (!t) return '';
+    const d = new Date(t.replace(' ', 'T') + (t.includes('+') ? '' : 'Z'));
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="page-enter max-w-4xl mx-auto px-6 py-10 flex flex-col" style={{ height: 'calc(100vh - 120px)' }}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-brush text-3xl text-ink">聊天室</h2>
+        <span className="font-serif text-xs text-ink-light">{messages.length} 条消息</span>
+      </div>
+
+      <div ref={listRef} className="flex-1 overflow-y-auto border border-tea-border bg-white/30 p-4 mb-4 space-y-3">
+        {messages.length === 0 && (
+          <div className="text-center font-serif text-sm text-ink-light py-20">亭中尚无人语，说些什么吧</div>
+        )}
+        {messages.map(m => {
+          const isMe = m.user_id === user.id;
+          return (
+            <div key={m.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 text-white font-serif text-sm ${isMe ? 'bg-amber' : 'bg-ink/60'}`}>
+                {(m.username || '?').charAt(0).toUpperCase()}
+              </div>
+              <div className={`max-w-[70%] ${isMe ? 'text-right' : ''}`}>
+                <div className="flex items-baseline gap-2 mb-0.5" style={{ flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                  <span className="font-serif text-xs text-ink-light">{m.username}</span>
+                  <span className="font-serif text-xs text-ink-light/40">{fmtChatTime(m.created_at)}</span>
+                </div>
+                <div className={`inline-block px-4 py-2 font-serif text-sm text-ink rounded-xl ${isMe ? 'bg-amber/20 rounded-tr-sm' : 'bg-ink/5 rounded-tl-sm'}`}>
+                  {m.content}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {err && <p className="font-serif text-sm text-cinnabar mb-2">{err}</p>}
+      <div className="flex gap-3">
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="说些什么..."
+          maxLength={500}
+          className="input-scroll flex-1 px-4 py-3 font-serif"
+        />
+        <button onClick={send} disabled={busy || !input.trim()} className="px-6 py-3 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60 flex-shrink-0">
+          {busy ? '...' : '发送'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 /* ==================== App ==================== */
 const App = () => {
   const [currentPage, setPage] = useState('home');
@@ -1994,7 +2111,7 @@ const App = () => {
       case 'invite': return <InvitePage user={user} />;
       case 'scripts': return <ScriptsPage user={user} setPage={go} onBuy={refreshUser} />;
       case 'players': return <PlayersPage user={user} onBuy={refreshUser} />;
-      case 'chat': return <PlaceholderPage title="聊天室" desc="亭中诸客共叙闲话" />;
+      case 'chat': return <ChatPage user={user} setPage={go} />;
       case 'list': return <ProductListPage setPage={go} user={user} onBuy={refreshUser} />;
       case 'detail': return <ProductDetailPage id={pageParam && pageParam.id} setPage={go} user={user} onBuy={refreshUser} />;
       case 'wallet': return <WalletPage user={user} setPage={go} />;
