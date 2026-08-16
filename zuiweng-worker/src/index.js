@@ -207,6 +207,22 @@ export default {
       return ok({ platforms: Object.values(byPlat) });
     }
 
+    // ============ 公开: 脚本/皮肤商品 & 玩家市场 ============
+    if (p === '/api/script-products' && method === 'GET') {
+      const sp = new URL(req.url).searchParams;
+      const t = sp.get('type') || '';
+      let sql = "SELECT id,type,name,desc,price,file_url,thumbnail,platform,sold,created_at FROM products WHERE active=1";
+      const vals = [];
+      if (t === 'script' || t === 'skin') { sql += ' AND type=?'; vals.push(t); }
+      sql += ' ORDER BY id DESC';
+      const rows = await DB.prepare(sql).bind(...vals).all();
+      return ok({ products: rows.results });
+    }
+    if (p === '/api/player-offers' && method === 'GET') {
+      const rows = await DB.prepare("SELECT o.id,o.title,o.desc,o.kind,o.price,o.created_at,u.username FROM player_offers o LEFT JOIN users u ON u.id=o.user_id WHERE o.status='open' ORDER BY o.id DESC LIMIT 100").all();
+      return ok({ offers: rows.results });
+    }
+
     // ============ 需要登录 ============
     const token = bearer(req.headers.get('authorization'));
     const auth = token ? await verifyToken(token, env.JWT_SECRET) : null;
@@ -281,6 +297,53 @@ export default {
       const rows = await DB.prepare(
         "SELECT id,nickname,email,petals,registered_at,last_sign_date,price,platform FROM chunshui_accounts WHERE owner_id=? ORDER BY id DESC").bind(auth.uid).all();
       return ok({ accounts: rows.results });
+    }
+
+    // 购买脚本/皮肤
+    if (p === '/api/script-orders' && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const b = await json(req);
+      const prod = await DB.prepare('SELECT * FROM products WHERE id=? AND active=1').bind(b.product_id).first();
+      if (!prod) return err(4003, '商品不存在或已下架');
+      const u = await DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.uid).first();
+      if (u.balance < prod.price) return err(4004, '代币不足');
+      await DB.batch([
+        DB.prepare('UPDATE users SET balance=balance-? WHERE id=?').bind(prod.price, auth.uid),
+        DB.prepare('UPDATE products SET sold=sold+1 WHERE id=?').bind(prod.id),
+        DB.prepare('INSERT INTO transactions(user_id,amount,type,note) VALUES(?,?,?,?)').bind(auth.uid, -prod.price, 'buy', `购买${prod.type === 'skin' ? '皮肤' : '脚本'} ${prod.name}`),
+      ]);
+      return ok({ product: { name: prod.name, type: prod.type, file_url: prod.file_url, desc: prod.desc } });
+    }
+
+    // 我的玩家市场发布
+    if (p === '/api/player-offers/mine' && method === 'GET') {
+      if (!auth) return err(4010, '未登录', 401);
+      const rows = await DB.prepare("SELECT * FROM player_offers WHERE user_id=? ORDER BY id DESC LIMIT 50").bind(auth.uid).all();
+      return ok({ offers: rows.results });
+    }
+    // 发布玩家市场
+    if (p === '/api/player-offers' && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const b = await json(req);
+      const title = String(b.title || '').trim();
+      if (!title || title.length > 40) return err(4001, '标题必填且不超过 40 字');
+      if (b.kind !== 'sell' && b.kind !== 'buy') return err(4001, '类型必填');
+      const price = Math.max(0, Number(b.price) || 0);
+      const r = await DB.prepare('INSERT INTO player_offers(user_id,title,desc,kind,price) VALUES(?,?,?,?,?)')
+        .bind(auth.uid, title, String(b.desc || '').slice(0, 300), b.kind, price).run();
+      return ok({ id: r.meta.last_row_id });
+    }
+    const mOffer = p.match(/^\/api\/player-offers\/(\d+)$/);
+    if (mOffer && method === 'PATCH') {
+      if (!auth) return err(4010, '未登录', 401);
+      const off = await DB.prepare('SELECT * FROM player_offers WHERE id=?').bind(mOffer[1]).first();
+      if (!off) return err(4004, '不存在');
+      if (off.user_id !== auth.uid && auth.role !== 'admin') return err(4030, '无权限', 403);
+      const b = await json(req);
+      const st = b.status === 'closed' ? 'closed' : b.status === 'open' ? 'open' : null;
+      if (!st) return err(4001, 'status 非法');
+      await DB.prepare('UPDATE player_offers SET status=? WHERE id=?').bind(st, off.id).run();
+      return ok({ status: st });
     }
 
     // 账号记录(签到/花瓣)
@@ -399,6 +462,43 @@ export default {
       vals.push(mPatch[1]);
       await DB.prepare(`UPDATE chunshui_accounts SET ${sets.join(',')} WHERE id=?`).bind(...vals).run();
       return ok({ updated: true });
+    }
+
+    // ============ 脚本/皮肤商品管理 (admin) ============
+    if (p === '/api/admin/products' && method === 'GET') {
+      const rows = await DB.prepare('SELECT * FROM products ORDER BY id DESC LIMIT 100').all();
+      return ok({ products: rows.results });
+    }
+    if (p === '/api/admin/products' && method === 'POST') {
+      const b = await json(req);
+      const name = String(b.name || '').trim();
+      if (!name || name.length > 40) return err(4001, '名称必填且不超过 40 字');
+      if (b.type !== 'script' && b.type !== 'skin') return err(4001, '类型必填(script/skin)');
+      const price = Math.max(0, Number(b.price) || 0);
+      const r = await DB.prepare('INSERT INTO products(type,name,desc,price,file_url,thumbnail,platform,active) VALUES(?,?,?,?,?,?,?,?)')
+        .bind(b.type, name, String(b.desc || '').slice(0, 300), price, String(b.file_url || '').slice(0, 500), String(b.thumbnail || '').slice(0, 500), String(b.platform || '').slice(0, 20), b.active === undefined ? 1 : (b.active ? 1 : 0)).run();
+      return ok({ id: r.meta.last_row_id });
+    }
+    const mProd = p.match(/^\/api\/admin\/products\/(\d+)$/);
+    if (mProd && method === 'PATCH') {
+      const b = await json(req);
+      const sets = [], vals = [];
+      if (b.name !== undefined) { sets.push('name=?'); vals.push(String(b.name).trim()); }
+      if (b.desc !== undefined) { sets.push('desc=?'); vals.push(String(b.desc).slice(0, 300)); }
+      if (b.price !== undefined) { sets.push('price=?'); vals.push(Math.max(0, Number(b.price) || 0)); }
+      if (b.file_url !== undefined) { sets.push('file_url=?'); vals.push(String(b.file_url).slice(0, 500)); }
+      if (b.thumbnail !== undefined) { sets.push('thumbnail=?'); vals.push(String(b.thumbnail).slice(0, 500)); }
+      if (b.platform !== undefined) { sets.push('platform=?'); vals.push(String(b.platform).slice(0, 20)); }
+      if (b.active !== undefined) { sets.push('active=?'); vals.push(b.active ? 1 : 0); }
+      if (b.type !== undefined && (b.type === 'script' || b.type === 'skin')) { sets.push('type=?'); vals.push(b.type); }
+      if (!sets.length) return err(4001, '无字段');
+      vals.push(mProd[1]);
+      await DB.prepare(`UPDATE products SET ${sets.join(',')} WHERE id=?`).bind(...vals).run();
+      return ok({ updated: true });
+    }
+    if (mProd && method === 'DELETE') {
+      await DB.prepare('DELETE FROM products WHERE id=?').bind(mProd[1]).run();
+      return ok({ deleted: true });
     }
 
     // ============ 渠道售卖配置 (admin) ============

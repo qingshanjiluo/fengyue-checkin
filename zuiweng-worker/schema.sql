@@ -154,3 +154,32 @@ CREATE TABLE IF NOT EXISTS recharge_orders (
   created_at  TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(user_id, status);
+
+-- 脚本/皮肤商品
+CREATE TABLE IF NOT EXISTS products (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  type       TEXT NOT NULL DEFAULT 'script',  -- script | skin
+  name       TEXT NOT NULL,
+  desc       TEXT DEFAULT '',
+  price      INTEGER NOT NULL DEFAULT 0,      -- 代币
+  file_url   TEXT DEFAULT '',                 -- 下载链接
+  thumbnail  TEXT DEFAULT '',
+  platform   TEXT DEFAULT '',                 -- 适用平台, 空=通用
+  active     INTEGER DEFAULT 1,
+  sold       INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_products_type ON products(type, active);
+
+-- 玩家市场 (发布/求购)
+CREATE TABLE IF NOT EXISTS player_offers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  title      TEXT NOT NULL,
+  desc       TEXT DEFAULT '',
+  kind       TEXT DEFAULT 'sell',            -- sell 出售 | buy 求购
+  price      INTEGER DEFAULT 0,              -- 代币
+  status     TEXT DEFAULT 'open',            -- open | closed
+  created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_offers_status ON player_offers(status, id);

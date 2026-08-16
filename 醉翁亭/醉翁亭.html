@@ -219,7 +219,7 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
     { id: 'me', label: '用户中心' },
     { id: 'recharge', label: '充值' },
     { id: 'invite', label: '邀请' },
-    ...(isAdmin ? [{ id: 'pool', label: '号池监看' }, { id: 'orders', label: '充值订单' }, { id: 'chlogs', label: '渠道报错' }, { id: 'admin-channels', label: '渠道管理' }, { id: 'admin-notices', label: '通知管理' }, { id: 'admin-settings', label: '系统设置' }] : []),
+    ...(isAdmin ? [{ id: 'pool', label: '号池监看' }, { id: 'orders', label: '充值订单' }, { id: 'chlogs', label: '渠道报错' }, { id: 'admin-channels', label: '渠道管理' }, { id: 'admin-products', label: '商品管理' }, { id: 'admin-notices', label: '通知管理' }, { id: 'admin-settings', label: '系统设置' }] : []),
   ];
   return (
     <nav className="sticky top-0 z-50 bg-rice/80 backdrop-blur-md border-b border-tea-border">
@@ -1672,6 +1672,303 @@ const OrdersAdminPage = () => {
   );
 };
 
+/* ==================== 弹窗 ==================== */
+const Modal = ({ onClose, children }) => (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="card-deckle bg-paper w-full max-w-sm p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+      {children}
+    </div>
+  </div>
+);
+
+/* ==================== 脚本/皮肤市场 ==================== */
+const ScriptsPage = ({ user, setPage, onBuy }) => {
+  const [tab, setTab] = useState('all');
+  const [products, setProducts] = useState([]);
+  const [confirm, setConfirm] = useState(null);
+  const [result, setResult] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const TABS = [['all', '全部'], ['script', '脚本'], ['skin', '皮肤']];
+  const TYPE = { script: '脚本', skin: '皮肤' };
+
+  useEffect(() => {
+    api('GET', '/api/script-products' + (tab === 'all' ? '' : '?type=' + tab)).then(d => setProducts(d.products || [])).catch(e => setErr(e.message));
+  }, [tab]);
+
+  const buy = (prod) => {
+    setErr('');
+    if (!user) { setConfirm({ needLogin: true }); return; }
+    if (user.balance < prod.price) { setConfirm({ poor: true }); return; }
+    setConfirm({ prod });
+  };
+  const doBuy = async () => {
+    setBusy(true); setErr('');
+    try {
+      const d = await api('POST', '/api/script-orders', { product_id: confirm.prod.id });
+      setResult(d.product); if (onBuy) onBuy(); setConfirm(null);
+    } catch (e) { setErr(e.message); setConfirm(null); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-2">脚本与皮肤</h2>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">各路脚本、皮肤与行囊，皆可在此寻得</p>
+
+      <div className="flex gap-2 mb-8 border-b border-tea-border">
+        {TABS.map(([k, v]) => (
+          <button key={k} onClick={() => setTab(k)} className={`px-5 py-2.5 font-serif text-sm border-b-2 -mb-px transition-colors ${tab === k ? 'border-amber text-amber' : 'border-transparent text-ink-light hover:text-ink'}`}>{v}</button>
+        ))}
+      </div>
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {products.map(prod => (
+          <div key={prod.id} className="card-deckle bg-white/50 border border-tea-border p-6 flex flex-col">
+            <div className="flex items-start justify-between mb-3">
+              <div className="h-12 w-12 flex items-center justify-center bg-ink text-white font-brush text-xl">{prod.name.charAt(0)}</div>
+              <span className="px-2 py-0.5 text-xs border border-tea-border text-ink-light font-serif">{TYPE[prod.type] || prod.type}{prod.platform ? ' · ' + prod.platform : ''}</span>
+            </div>
+            <h3 className="font-serif text-ink text-lg mb-2">{prod.name}</h3>
+            <p className="font-serif text-sm text-ink-light mb-4 flex-1">{prod.desc}</p>
+            <div className="flex items-center justify-between mt-2">
+              <div>
+                <span className="font-lora text-xl text-amber">{fmt(prod.price)}</span>
+                <span className="font-serif text-xs text-ink-light ml-1">代币</span>
+              </div>
+              <button onClick={() => buy(prod)} className="px-5 py-2 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">购取</button>
+            </div>
+            {prod.sold > 0 && <p className="font-serif text-xs text-ink-light mt-3">已售 {prod.sold} 份</p>}
+          </div>
+        ))}
+      </div>
+      {products.length === 0 && !err && <div className="card-deckle bg-white/30 border border-tea-border p-10 text-center font-serif text-sm text-ink-light">暂无商品</div>}
+
+      {confirm && confirm.needLogin && (
+        <Modal onClose={() => setConfirm(null)}>
+          <p className="font-serif text-ink text-lg mb-6 text-center">请先登栈后再购取</p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => { setConfirm(null); setPage('login'); }} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest">去登栈</button>
+          </div>
+        </Modal>
+      )}
+      {confirm && confirm.poor && (
+        <Modal onClose={() => setConfirm(null)}>
+          <p className="font-serif text-ink text-lg mb-6 text-center">代币不足，请先充值</p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => { setConfirm(null); setPage('recharge'); }} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest">去充值</button>
+          </div>
+        </Modal>
+      )}
+      {confirm && confirm.prod && (
+        <Modal onClose={() => setConfirm(null)}>
+          <p className="font-brush text-2xl text-ink mb-4 text-center">确认购取</p>
+          <p className="font-serif text-ink mb-1 text-center">{confirm.prod.name}</p>
+          <p className="font-serif text-sm text-ink-light mb-6 text-center">{fmt(confirm.prod.price)} 代币，当前余额 {fmt(user.balance)}</p>
+          {err && <p className="font-serif text-sm text-cinnabar mb-4 text-center">{err}</p>}
+          <div className="flex gap-3 justify-center">
+            <button onClick={doBuy} disabled={busy} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest disabled:opacity-60">{busy ? '处理中...' : '确认购取'}</button>
+            <button onClick={() => setConfirm(null)} className="px-6 py-2.5 border border-tea-border font-serif text-sm text-ink-light hover:text-ink">取消</button>
+          </div>
+        </Modal>
+      )}
+      {result && (
+        <Modal onClose={() => setResult(null)}>
+          <p className="font-brush text-2xl text-ink mb-4 text-center">购得 {TYPE[result.type]}「{result.name}」</p>
+          <p className="font-serif text-sm text-ink-light mb-3 text-center">{result.desc}</p>
+          {result.file_url && (
+            <div className="mb-6 text-center">
+              <a href={result.file_url} target="_blank" rel="noreferrer" className="inline-block px-6 py-2.5 border border-amber text-amber font-serif text-sm tracking-widest hover:bg-amber/5">前往下载</a>
+            </div>
+          )}
+          <div className="flex justify-center">
+            <button onClick={() => setResult(null)} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest">收讫</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+/* ==================== 玩家市场 ==================== */
+const PlayersPage = ({ user, onBuy }) => {
+  const [offers, setOffers] = useState([]);
+  const [mine, setMine] = useState([]);
+  const [err, setErr] = useState('');
+  const [form, setForm] = useState({ title: '', desc: '', kind: 'sell', price: '' });
+  const [busy, setBusy] = useState(false);
+  const KIND = { sell: '出售', buy: '求购' };
+
+  const load = () => {
+    api('GET', '/api/player-offers').then(d => setOffers(d.offers || [])).catch(e => setErr(e.message));
+    if (user) api('GET', '/api/player-offers/mine').then(d => setMine(d.offers || [])).catch(() => {});
+  };
+  useEffect(() => { load(); }, [user]);
+
+  const submit = async () => {
+    if (!form.title.trim()) { setErr('请输入标题'); return; }
+    setBusy(true); setErr('');
+    try {
+      await api('POST', '/api/player-offers', { title: form.title, desc: form.desc, kind: form.kind, price: Number(form.price) || 0 });
+      setForm({ title: '', desc: '', kind: 'sell', price: '' });
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const close = async (id) => {
+    try { await api('PATCH', `/api/player-offers/${id}`, { status: 'closed' }); load(); } catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-2">玩家市场</h2>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">玩家之间的号、物与约定在此流通</p>
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+        <div className="card-deckle bg-white/50 border border-tea-border p-6 lg:col-span-2">
+          <h3 className="font-serif text-ink mb-4">当前发布</h3>
+          <div className="space-y-3">
+            {offers.map(o => (
+              <div key={o.id} className="border border-tea-border/60 bg-white/30 p-4">
+                <div className="flex flex-wrap items-center gap-3 mb-1">
+                  <span className={`px-2 py-0.5 text-xs border font-serif ${o.kind === 'buy' ? 'border-tea-border text-ink-light' : 'border-amber/40 text-amber'}`}>{KIND[o.kind] || o.kind}</span>
+                  <span className="font-serif text-ink">{o.title}</span>
+                  <span className="font-lora text-sm text-amber ml-auto">{fmt(o.price)} 代币</span>
+                </div>
+                {o.desc && <p className="font-serif text-sm text-ink-light">{o.desc}</p>}
+                <p className="font-serif text-xs text-ink-light/60 mt-2">{o.username} · {fmtTime(o.created_at)}</p>
+              </div>
+            ))}
+            {offers.length === 0 && <div className="text-center font-serif text-sm text-ink-light py-8">暂无发布</div>}
+          </div>
+        </div>
+
+        <div className="card-deckle bg-white/50 border border-tea-border p-6">
+          <h3 className="font-serif text-ink mb-4">我要发布</h3>
+          {!user ? (
+            <p className="font-serif text-sm text-ink-light mb-4">登栈后方可发布</p>
+          ) : (
+            <div className="space-y-4">
+              <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="标题（如：出售密丝高体验点号）" className="input-scroll w-full px-4 py-2.5 font-serif" />
+              <textarea value={form.desc} onChange={e => setForm({ ...form, desc: e.target.value })} placeholder="补充说明" rows={3} className="input-scroll w-full px-4 py-2.5 font-serif resize-none" />
+              <div className="flex gap-3">
+                <select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })} className="input-scroll px-4 py-2.5 font-serif">
+                  <option value="sell">出售</option>
+                  <option value="buy">求购</option>
+                </select>
+                <input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="价格(代币)" className="input-scroll flex-1 px-4 py-2.5 font-serif" />
+              </div>
+              <button onClick={submit} disabled={busy} className="w-full py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60">{busy ? '发布中...' : '发布'}</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {user && (
+        <div>
+          <h3 className="font-serif text-ink mb-4">我的发布</h3>
+          <div className="space-y-3">
+            {mine.map(o => (
+              <div key={o.id} className="border border-tea-border/60 bg-white/30 p-4 flex flex-wrap items-center gap-3">
+                <span className={`px-2 py-0.5 text-xs border font-serif ${o.status === 'open' ? 'border-amber/40 text-amber' : 'border-tea-border text-ink-light/50'}`}>{o.status === 'open' ? '发布中' : '已关闭'}</span>
+                <span className={`px-2 py-0.5 text-xs border font-serif ${o.kind === 'buy' ? 'border-tea-border text-ink-light' : 'border-amber/40 text-amber'}`}>{KIND[o.kind] || o.kind}</span>
+                <span className="font-serif text-ink">{o.title}</span>
+                <span className="font-lora text-sm text-amber">{fmt(o.price)} 代币</span>
+                {o.status === 'open' && <button onClick={() => close(o.id)} className="ml-auto px-3 py-1.5 text-xs font-serif border border-cinnabar/40 text-cinnabar hover:bg-cinnabar/5 tracking-wider">关闭</button>}
+              </div>
+            ))}
+            {mine.length === 0 && <div className="text-center font-serif text-sm text-ink-light py-8">尚无发布</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ==================== 商品管理 (admin) ==================== */
+const ProductsAdminPage = () => {
+  const [products, setProducts] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [form, setForm] = useState({ type: 'script', name: '', desc: '', price: '', file_url: '', thumbnail: '', platform: '' });
+  const TYPE = { script: '脚本', skin: '皮肤' };
+
+  const load = () => api('GET', '/api/admin/products').then(d => setProducts(d.products || [])).catch(e => setMsg(e.message));
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!form.name.trim()) { setMsg('请输入名称'); return; }
+    setMsg('');
+    try { await api('POST', '/api/admin/products', { ...form, price: Number(form.price) || 0 }); setForm({ type: 'script', name: '', desc: '', price: '', file_url: '', thumbnail: '', platform: '' }); load(); setMsg('已上架'); }
+    catch (e) { setMsg(e.message); }
+  };
+  const patch = async (id, data) => {
+    setMsg('');
+    try { await api('PATCH', `/api/admin/products/${id}`, data); load(); } catch (e) { setMsg(e.message); }
+  };
+  const del = async (id) => {
+    setMsg('');
+    try { await api('DELETE', `/api/admin/products/${id}`); load(); } catch (e) { setMsg(e.message); }
+  };
+  const setField = (id, key, val) => setProducts(prev => prev.map(p => p.id === id ? { ...p, [key]: val } : p));
+
+  return (
+    <div className="page-enter max-w-6xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-8">商品管理</h2>
+      {msg && <p className="font-serif text-sm text-ink mb-6">{msg}</p>}
+
+      <div className="card-deckle bg-white/50 border border-tea-border p-6 mb-10 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-scroll px-4 py-2.5 font-serif">
+          <option value="script">脚本</option>
+          <option value="skin">皮肤</option>
+        </select>
+        <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="名称" className="input-scroll px-4 py-2.5 font-serif" />
+        <input value={form.desc} onChange={e => setForm({ ...form, desc: e.target.value })} placeholder="描述" className="input-scroll px-4 py-2.5 font-serif" />
+        <input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="价格(代币)" className="input-scroll px-4 py-2.5 font-serif" />
+        <input value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} placeholder="下载链接" className="input-scroll px-4 py-2.5 font-serif" />
+        <input value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value })} placeholder="适用平台（空=通用）" className="input-scroll px-4 py-2.5 font-serif" />
+        <button onClick={add} className="md:col-span-2 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90">上架商品</button>
+      </div>
+
+      <div className="bg-white/30 border border-tea-border overflow-x-auto">
+        <table className="w-full text-sm font-serif">
+          <thead>
+            <tr className="border-b border-tea-border text-ink-light text-xs tracking-widest">
+              <th className="px-4 py-3 text-left">类型</th>
+              <th className="px-4 py-3 text-left">名称</th>
+              <th className="px-4 py-3 text-left">描述</th>
+              <th className="px-4 py-3 text-right">价格</th>
+              <th className="px-4 py-3 text-left">下载链接</th>
+              <th className="px-4 py-3 text-center">上架</th>
+              <th className="px-4 py-3 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-tea-border/50">
+            {products.map(p => (
+              <tr key={p.id} className="hover:bg-white/20 transition-colors align-middle">
+                <td className="px-4 py-3">{TYPE[p.type] || p.type}</td>
+                <td className="px-4 py-3"><input value={p.name} onChange={e => setField(p.id, 'name', e.target.value)} className="input-scroll px-2 py-1 w-32" /></td>
+                <td className="px-4 py-3"><input value={p.desc} onChange={e => setField(p.id, 'desc', e.target.value)} className="input-scroll px-2 py-1 w-48" /></td>
+                <td className="px-4 py-3"><input type="number" value={p.price} onChange={e => setField(p.id, 'price', e.target.value)} className="input-scroll px-2 py-1 w-20 text-right" /></td>
+                <td className="px-4 py-3"><input value={p.file_url} onChange={e => setField(p.id, 'file_url', e.target.value)} className="input-scroll px-2 py-1 w-48" /></td>
+                <td className="px-4 py-3 text-center">
+                  <button onClick={() => patch(p.id, { active: p.active ? 0 : 1 })} className={`px-2 py-0.5 text-xs border ${p.active ? 'border-amber/40 text-amber' : 'border-tea-border text-ink-light'}`}>{p.active ? '上架中' : '已下架'}</button>
+                </td>
+                <td className="px-4 py-3 text-center whitespace-nowrap">
+                  <button onClick={() => patch(p.id, { name: p.name, desc: p.desc, price: Number(p.price) || 0, file_url: p.file_url })} className="px-3 py-1.5 text-xs font-serif bg-amber text-white hover:bg-amber/90 tracking-wider">保存</button>
+                  <button onClick={() => del(p.id)} className="px-3 py-1.5 text-xs font-serif border border-cinnabar/40 text-cinnabar hover:bg-cinnabar/5 tracking-wider ml-2">删除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {products.length === 0 && <div className="px-6 py-12 text-center font-serif text-sm text-ink-light">暂无商品</div>}
+      </div>
+    </div>
+  );
+};
+
 /* ==================== App ==================== */
 const App = () => {
   const [currentPage, setPage] = useState('home');
@@ -1695,8 +1992,8 @@ const App = () => {
       case 'me': return <MePage user={user} setPage={go} onRefresh={refreshUser} />;
       case 'recharge': return <RechargePage user={user} setPage={go} />;
       case 'invite': return <InvitePage user={user} />;
-      case 'scripts': return <PlaceholderPage title="脚本与皮肤" desc="各路脚本、皮肤与行囊，皆可在此寻得" />;
-      case 'players': return <PlaceholderPage title="玩家市场" desc="玩家之间的号、物与约定在此流通" />;
+      case 'scripts': return <ScriptsPage user={user} setPage={go} onBuy={refreshUser} />;
+      case 'players': return <PlayersPage user={user} onBuy={refreshUser} />;
       case 'chat': return <PlaceholderPage title="聊天室" desc="亭中诸客共叙闲话" />;
       case 'list': return <ProductListPage setPage={go} user={user} onBuy={refreshUser} />;
       case 'detail': return <ProductDetailPage id={pageParam && pageParam.id} setPage={go} user={user} onBuy={refreshUser} />;
@@ -1705,6 +2002,7 @@ const App = () => {
       case 'chlogs': return <ChannelLogsAdminPage />;
       case 'orders': return <OrdersAdminPage />;
       case 'admin-channels': return <ChannelsAdminPage />;
+      case 'admin-products': return <ProductsAdminPage />;
       case 'admin-notices': return <NoticesAdminPage />;
       case 'admin-settings': return <SettingsAdminPage />;
       default: return <HomePage setPage={go} user={user} />;
