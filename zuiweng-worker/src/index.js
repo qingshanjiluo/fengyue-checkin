@@ -9,6 +9,8 @@ const err = (code, message, status = 400) => new Response(JSON.stringify({ code,
 });
 const json = async (req) => { try { return await req.json(); } catch { return {}; } };
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
+// 取客户端 IP (Cloudflare 直连头优先)
+const clientIp = (req) => (req.headers.get('cf-connecting-ip') || req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
 
 function bearer(auth) {
   if (!auth || !auth.startsWith('Bearer ')) return null;
@@ -23,6 +25,76 @@ function randCode(len = 8) {
   let s = '';
   for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
   return s;
+}
+
+// ============ 渠道官方验证 ============
+// 用卖家提供的账号名/密码调用已知渠道登录, 取得真实积分作为官方验证数据
+const VERIFY_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36';
+const PLATFORM_UNITS = { aimagnet: '花瓣', fengyue: '积分', missai: '体验点', dzmm: '积分' };
+const PLATFORM_LABELS = { aimagnet: '春水酒馆', fengyue: '风月酒馆', missai: '密丝AI', dzmm: 'DZMM' };
+
+async function verifyAccount(platform, username, password) {
+  if (!platform || !username || !password) return { ok: false, error: '渠道/账号/密码必填' };
+  if (platform === 'fengyue' || platform === 'aimagnet') {
+    // 风月/春水: console/api/login -> go/api/account/point + stardust/balance (多域名容错)
+    const domains = ['https://aiaha.xyz', 'https://ai-xan.xyz', 'https://acepro.store', 'https://aquantancee.xyz'];
+    let lastErr = '';
+    for (const base of domains) {
+      let raw = '';
+      try {
+        const r = await fetch(base + '/console/api/login', {
+          method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': VERIFY_UA, 'referer': base + '/zh/signin', 'x-language': 'zh-Hans', 'x-timezone': 'Asia/Shanghai' },
+          body: JSON.stringify({ email: username, password }),
+        });
+        raw = await r.clone().text();
+        const j = JSON.parse(raw);
+        if (j.result === 'success' && typeof j.data === 'string' && j.data.startsWith('eyJ')) {
+          // 积分 (go/api/account/point): 风月/春水平台该接口固定返回 0, 属平台限制
+          const pr = await fetch(base + '/go/api/account/point', { headers: { 'authorization': 'Bearer ' + j.data, 'user-agent': VERIFY_UA } });
+          const pj = await pr.json();
+          let points = 0;
+          if (pj.code === 100000 && pj.data) points = Math.floor(Number(pj.data.points) || 0);
+          // 星尘 (console/api/stardust/balance): 签到获得的真实代币
+          let stardust = null;
+          try {
+            const sr = await fetch(base + '/console/api/stardust/balance', { headers: { 'authorization': 'Bearer ' + j.data, 'user-agent': VERIFY_UA, 'x-language': 'zh-Hans', 'x-timezone': 'Asia/Shanghai' } });
+            const sj = await sr.json();
+            if (sj.code === 200 && sj.data) stardust = Math.floor(Number(sj.data.current_amount) || 0);
+          } catch (e) { /* 星尘读取失败不影响验证 */ }
+          const label = PLATFORM_LABELS[platform] || platform;
+          const unit = PLATFORM_UNITS[platform] || '积分';
+          const parts = [`${label} · ${unit} ${points}`];
+          if (stardust !== null) parts.push(`星尘 ${stardust}`);
+          return { ok: true, username, points, stardust, label, unit, detail: parts.join(' · ') };
+        }
+        if (!r.ok) { try { lastErr = `${base} HTTP ${r.status} ${(await r.clone().text()).slice(0, 100)}`; } catch { lastErr = `${base} HTTP ${r.status}`; } }
+        else { try { lastErr = `${base} resp:${raw.slice(0, 120)}`; } catch {} }
+      } catch (e) { lastErr = `${base} ${String(e).slice(0, 80)}`; }
+    }
+    return { ok: false, error: `登录失败：账号或密码有误 (${lastErr || '全部域名'})` };
+  }
+  if (platform === 'missai') {
+    try {
+      const r = await fetch('https://www.miss001.org/api/gva/base/login', {
+        method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': VERIFY_UA, 'origin': 'https://www.miss001.org', 'referer': 'https://www.miss001.org/' },
+        body: JSON.stringify({ username, password }),
+      });
+      const j = await r.json();
+      if (j.code === 0 && j.data && j.data.token) {
+        const pr = await fetch('https://www.miss001.org/api/gva/pointsAcc/getUserPointsAccount', {
+          headers: { 'user-agent': VERIFY_UA, 'x-token': j.data.token, 'origin': 'https://www.miss001.org' },
+        });
+        const pj = await pr.json();
+        const points = Math.floor(Number(pj.data && pj.data.combinedBalance) || 0);
+        return { ok: true, username, points, label: '密丝AI', unit: '体验点', detail: `密丝AI · 体验点 ${points}` };
+      }
+      return { ok: false, error: (j.msg || '登录失败：账号或密码有误') };
+    } catch (e) { return { ok: false, error: '登录失败：网络异常' }; }
+  }
+  if (platform === 'dzmm') {
+    return { ok: false, error: 'DZMM 受 Cloudflare 保护，无法自动验证' };
+  }
+  return { ok: false, error: '未知渠道' };
 }
 
 // 渠道自动上架: 对上报账号评估是否满足准入阈值(渠道已开启 + petals>=min_petals), 满足则置为 on_sale 并定价
@@ -84,6 +156,12 @@ export default {
       const b = await json(req);
       if (!b.username || !b.password || b.username.length > 32 || b.password.length < 6)
         return err(4001, '参数错误');
+      // 一 IP 一号: 同一 IP 已有注册用户则拒绝
+      const ip = clientIp(req);
+      if (ip) {
+        const dup = await DB.prepare('SELECT id FROM users WHERE ip=? LIMIT 1').bind(ip).first();
+        if (dup) return err(4003, '该 IP 已注册过账号，一个网络只能注册一枚信物');
+      }
       const salt = randomSalt();
       const ph = await hashPassword(b.password, salt);
       // 邀请码: 校验存在则登记邀请关系
@@ -94,8 +172,8 @@ export default {
       }
       const code = randCode();
       try {
-        const r = await DB.prepare('INSERT INTO users(username,password_hash,role) VALUES(?,?,?)')
-          .bind(b.username, `${salt}:${ph}`, 'user').run();
+        const r = await DB.prepare('INSERT INTO users(username,password_hash,role,ip) VALUES(?,?,?,?)')
+          .bind(b.username, `${salt}:${ph}`, 'user', ip || null).run();
         const uid = r.meta.last_row_id;
         await DB.prepare('INSERT OR IGNORE INTO invite_codes(user_id,code) VALUES(?,?)').bind(uid, code).run();
         if (inviterId) {
@@ -122,14 +200,14 @@ export default {
       let upserted = 0;
       for (const a of b.accounts || []) {
         ops.push(DB.prepare(`INSERT INTO chunshui_accounts
-          (platform,nickname,password,email,email_password,user_id,registered_at,petals,status,imported_at)
-          VALUES(?,?,?,?,?,?,?,?,?,datetime('now','localtime'))
+          (platform,nickname,password,email,email_password,user_id,registered_at,petals,stardust,status,imported_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,datetime('now','localtime'))
           ON CONFLICT(email) DO UPDATE SET
             platform=excluded.platform, nickname=excluded.nickname, password=excluded.password, user_id=excluded.user_id,
-            registered_at=excluded.registered_at, petals=excluded.petals,
+            registered_at=excluded.registered_at, petals=excluded.petals, stardust=excluded.stardust,
             email_password=excluded.email_password, status=CASE WHEN chunshui_accounts.status='sold' THEN 'sold' ELSE excluded.status END`)
           .bind(a.platform ?? 'aimagnet', a.nickname ?? '', a.password ?? '', a.email ?? '', a.email_password ?? '',
-                a.user_id ?? '', a.registered_at ?? '', a.petals ?? 0, a.status ?? 'pool'));
+                a.user_id ?? '', a.registered_at ?? '', a.petals ?? 0, a.stardust ?? 0, a.status ?? 'pool'));
         upserted++;
       }
       for (const s of b.sign_records || []) {
@@ -137,12 +215,12 @@ export default {
           .bind(s.account_id, s.date, s.status, s.reward || 0));
       }
       for (const pt of b.points || []) {
-        ops.push(DB.prepare('INSERT OR REPLACE INTO chunshui_point_snapshots(account_id,date,petals) VALUES(?,?,?)')
-          .bind(pt.account_id, pt.date, pt.petals || 0));
+        ops.push(DB.prepare('INSERT OR REPLACE INTO chunshui_point_snapshots(account_id,date,petals,stardust) VALUES(?,?,?,?)')
+          .bind(pt.account_id, pt.date, pt.petals || 0, pt.stardust ?? 0));
       }
       for (const h of b.health || []) {
-        ops.push(DB.prepare("UPDATE chunshui_accounts SET last_check_at=?, last_check_ok=?, check_error=?, petals=? WHERE id=?")
-          .bind(now(), h.ok ? 1 : 0, h.error || '', h.petals ?? 0, h.account_id));
+        ops.push(DB.prepare("UPDATE chunshui_accounts SET last_check_at=?, last_check_ok=?, check_error=?, petals=?, stardust=? WHERE id=?")
+          .bind(now(), h.ok ? 1 : 0, h.error || '', h.petals ?? 0, h.stardust ?? 0, h.account_id));
       }
       try {
         if (ops.length) await DB.batch(ops);
@@ -219,7 +297,13 @@ export default {
       return ok({ products: rows.results });
     }
     if (p === '/api/player-offers' && method === 'GET') {
-      const rows = await DB.prepare("SELECT o.id,o.title,o.desc,o.kind,o.price,o.created_at,u.username FROM player_offers o LEFT JOIN users u ON u.id=o.user_id WHERE o.status='open' ORDER BY o.id DESC LIMIT 100").all();
+      const sp = new URL(req.url).searchParams;
+      const cat = sp.get('category') || '';
+      let sql = "SELECT o.id,o.title,o.desc,o.kind,o.price,o.category,o.platform,o.verified,o.verify_detail,o.account_name,o.account_email,o.file_name,o.file_tip,o.created_at,u.username FROM player_offers o LEFT JOIN users u ON u.id=o.user_id WHERE o.status='open'";
+      const vals = [];
+      if (cat === 'account' || cat === 'resource' || cat === 'script') { sql += ' AND o.category=?'; vals.push(cat); }
+      sql += ' ORDER BY o.id DESC LIMIT 100';
+      const rows = await DB.prepare(sql).bind(...vals).all();
       return ok({ offers: rows.results });
     }
 
@@ -321,17 +405,38 @@ export default {
       const rows = await DB.prepare("SELECT * FROM player_offers WHERE user_id=? ORDER BY id DESC LIMIT 50").bind(auth.uid).all();
       return ok({ offers: rows.results });
     }
-    // 发布玩家市场
+    // 发布玩家市场 (出号/出资源/出脚本)
     if (p === '/api/player-offers' && method === 'POST') {
       if (!auth) return err(4010, '未登录', 401);
       const b = await json(req);
       const title = String(b.title || '').trim();
       if (!title || title.length > 40) return err(4001, '标题必填且不超过 40 字');
-      if (b.kind !== 'sell' && b.kind !== 'buy') return err(4001, '类型必填');
+      if (b.kind !== 'sell' && b.kind !== 'buy') return err(4001, '类型必填(sell/buy)');
       const price = Math.max(0, Number(b.price) || 0);
-      const r = await DB.prepare('INSERT INTO player_offers(user_id,title,desc,kind,price) VALUES(?,?,?,?,?)')
-        .bind(auth.uid, title, String(b.desc || '').slice(0, 300), b.kind, price).run();
-      return ok({ id: r.meta.last_row_id });
+      const category = ['account', 'resource', 'script'].includes(b.category) ? b.category : 'account';
+      let platform = '', accountName = '', accountPwd = '', accountEmail = '', verified = 0, verifyDetail = '';
+      let fileUrl = '', fileName = '', fileTip = '';
+      if (category === 'account') {
+        platform = String(b.platform || '').trim();
+        accountName = String(b.account_name || '').trim();
+        accountPwd = String(b.account_password || '').trim();
+        accountEmail = String(b.account_email || '').trim();
+        if (!['fengyue', 'missai', 'aimagnet', 'dzmm'].includes(platform)) return err(4001, '渠道必须从内置选项中选择');
+        if (!accountName || !accountPwd) return err(4001, '出号需填写账号名与账号密码');
+        // 渠道官方自动验证受平台 IP 风控限制 (Worker 数据中心 IP 被各渠道拦截), 发布时标记未验证
+        verified = 0; verifyDetail = '发布时未自动验证 (渠道平台风控限制)';
+      }
+      if (category === 'script') {
+        fileUrl = String(b.file_url || '').trim().slice(0, 500);
+        fileName = String(b.file_name || '').trim().slice(0, 100);
+        fileTip = String(b.file_tip || '').trim().slice(0, 300);
+        if (!fileUrl) return err(4001, '出脚本需填写文件/网盘链接');
+      }
+      const r = await DB.prepare(
+        'INSERT INTO player_offers(user_id,title,desc,kind,price,category,platform,account_name,account_password,account_email,verified,verify_detail,file_url,file_name,file_tip) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).bind(auth.uid, title, String(b.desc || '').slice(0, 300), b.kind, price, category,
+             platform, accountName, accountPwd, accountEmail, verified, verifyDetail, fileUrl, fileName, fileTip).run();
+      return ok({ id: r.meta.last_row_id, verified, verify_detail: verifyDetail });
     }
     const mOffer = p.match(/^\/api\/player-offers\/(\d+)$/);
     if (mOffer && method === 'PATCH') {
@@ -344,6 +449,167 @@ export default {
       if (!st) return err(4001, 'status 非法');
       await DB.prepare('UPDATE player_offers SET status=? WHERE id=?').bind(st, off.id).run();
       return ok({ status: st });
+    }
+    // 重新验证出号 (卖家/管理员)
+    const mOfferVerify = p.match(/^\/api\/player-offers\/(\d+)\/verify$/);
+    if (mOfferVerify && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const off = await DB.prepare('SELECT * FROM player_offers WHERE id=?').bind(mOfferVerify[1]).first();
+      if (!off) return err(4004, '不存在');
+      if (off.user_id !== auth.uid && auth.role !== 'admin') return err(4030, '无权限', 403);
+      if (off.category !== 'account') return err(4001, '仅出号可验证');
+      // 渠道官方自动验证受平台 IP 风控限制, 统一标记验证不可用
+      await DB.prepare('UPDATE player_offers SET verified=0, verify_detail=? WHERE id=?').bind('渠道平台风控限制, 自动验证不可用', off.id).run();
+      return ok({ verified: 0, verify_detail: '渠道平台风控限制, 自动验证不可用' });
+    }
+
+    // ============ 玩家交易订单 (托管/冻结) ============
+    // 拍下: 买家冻结代币 -> 出号即交付凭证 -> 双方确认 -> 结算给卖家
+    if (p === '/api/player-orders' && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const b = await json(req);
+      const off = await DB.prepare("SELECT * FROM player_offers WHERE id=? AND status='open'").bind(b.offer_id).first();
+      if (!off) return err(4003, '该发布不存在或已关闭');
+      if (off.user_id === auth.uid) return err(4001, '不能购买自己的发布');
+      const u = await DB.prepare('SELECT * FROM users WHERE id=?').bind(auth.uid).first();
+      if (u.balance < off.price) return err(4004, '代币不足');
+      if (!off.price) return err(4001, '免费发布无需拍下');
+      const no = 'PO' + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1e6).toString(36).toUpperCase();
+      // 出号: 首个拍下者获得凭证, 立即关闭发布防重复售号
+      if (off.category === 'account') {
+        const paid = await DB.prepare("SELECT COUNT(*) n FROM player_orders WHERE offer_id=? AND status IN('paid','completed')").bind(off.id).first();
+        if (paid.n > 0) return err(4003, '该号已被拍下');
+      }
+      const r = await DB.prepare(
+        "INSERT INTO player_orders(order_no,offer_id,buyer_id,seller_id,category,amount,status,buyer_confirm,seller_confirm) VALUES(?,?,?,?,?,?,'paid',0,0)"
+      ).bind(no, off.id, auth.uid, off.user_id, off.category, off.price).run();
+      const ops = [
+        DB.prepare('UPDATE users SET balance=balance-? WHERE id=?').bind(off.price, auth.uid),
+        DB.prepare('INSERT INTO transactions(user_id,amount,type,note) VALUES(?,?,?,?)').bind(auth.uid, -off.price, 'buy', `拍下玩家发布「${off.title}」(冻结)`),
+      ];
+      if (off.category === 'account') {
+        ops.push(DB.prepare("UPDATE player_offers SET status='closed' WHERE id=? AND status='open'").bind(off.id));
+      }
+      await DB.batch(ops);
+      const order = { id: r.meta.last_row_id, order_no: no, category: off.category, amount: off.price, status: 'paid',
+        account: off.category === 'account' ? { platform: off.platform, account_name: off.account_name, account_password: off.account_password, account_email: off.account_email, verified: off.verified, verify_detail: off.verify_detail } : null,
+        file: off.category === 'script' ? { file_url: off.file_url, file_name: off.file_name, file_tip: off.file_tip } : null };
+      return ok(order);
+    }
+    // 我的玩家订单 (买家或卖家)
+    if (p === '/api/player-orders/mine' && method === 'GET') {
+      if (!auth) return err(4010, '未登录', 401);
+      const rows = await DB.prepare(
+        "SELECT o.*, of.title, of.category AS offer_category, bu.username AS buyer_name, su.username AS seller_name FROM player_orders o LEFT JOIN player_offers of ON of.id=o.offer_id LEFT JOIN users bu ON bu.id=o.buyer_id LEFT JOIN users su ON su.id=o.seller_id WHERE o.buyer_id=? OR o.seller_id=? ORDER BY o.id DESC LIMIT 50"
+      ).bind(auth.uid, auth.uid).all();
+      // 附上交付信息 (账号凭证/脚本附件, 仅买家或卖家可见)
+      const out = [];
+      for (const o of rows.results) {
+        const off = await DB.prepare('SELECT * FROM player_offers WHERE id=?').bind(o.offer_id).first();
+        const oo = { ...o };
+        if (off) {
+          if (off.category === 'account') {
+            oo.account = { platform: off.platform, account_name: off.account_name, account_password: off.account_password, account_email: off.account_email, verified: off.verified, verify_detail: off.verify_detail };
+          }
+          if (off.category === 'script') {
+            oo.file = { file_url: off.file_url, file_name: off.file_name, file_tip: off.file_tip };
+          }
+        }
+        out.push(oo);
+      }
+      return ok({ orders: out });
+    }
+    // 订单确认/取消
+    const mPOrder = p.match(/^\/api\/player-orders\/(\d+)$/);
+    if (mPOrder && method === 'PATCH') {
+      if (!auth) return err(4010, '未登录', 401);
+      const ord = await DB.prepare('SELECT * FROM player_orders WHERE id=?').bind(mPOrder[1]).first();
+      if (!ord) return err(4004, '订单不存在');
+      const b = await json(req);
+      // 确认到货 (买家/卖家各自点确认, 双方都确认后结算)
+      if (b.act === 'confirm') {
+        if (ord.status !== 'paid') return err(4001, '订单状态已变更');
+        const as = b.as === 'seller' ? 'seller' : 'buyer';
+        const me = as === 'buyer' ? ord.buyer_id : ord.seller_id;
+        if (auth.uid !== me && auth.role !== 'admin') return err(4030, '无权限', 403);
+        if (as === 'buyer') {
+          await DB.prepare('UPDATE player_orders SET buyer_confirm=1, updated_at=? WHERE id=?').bind(now(), ord.id).run();
+        } else {
+          await DB.prepare('UPDATE player_orders SET seller_confirm=1, updated_at=? WHERE id=?').bind(now(), ord.id).run();
+        }
+        const upd = await DB.prepare('SELECT * FROM player_orders WHERE id=?').bind(ord.id).first();
+        if (upd.buyer_confirm && upd.seller_confirm) {
+          // 双方确认 -> 结算: 冻结金额发放给卖家
+          await DB.batch([
+            DB.prepare("UPDATE player_orders SET status='completed', updated_at=? WHERE id=?").bind(now(), ord.id),
+            DB.prepare('UPDATE users SET balance=balance+? WHERE id=?').bind(ord.amount, ord.seller_id),
+            DB.prepare('INSERT INTO transactions(user_id,amount,type,note) VALUES(?,?,?,?)').bind(ord.seller_id, ord.amount, 'sell', `玩家交易结算 #${ord.order_no}`),
+          ]);
+          return ok({ status: 'completed', settled: true });
+        }
+        return ok({ status: 'paid', confirmed: as });
+      }
+      // 取消退款 (管理员)
+      if (b.act === 'cancel' && auth.role === 'admin') {
+        if (ord.status !== 'paid') return err(4001, '订单状态已变更');
+        await DB.batch([
+          DB.prepare("UPDATE player_orders SET status='cancelled', updated_at=? WHERE id=?").bind(now(), ord.id),
+          DB.prepare('UPDATE users SET balance=balance+? WHERE id=?').bind(ord.amount, ord.buyer_id),
+          DB.prepare('INSERT INTO transactions(user_id,amount,type,note) VALUES(?,?,?,?)').bind(ord.buyer_id, ord.amount, 'refund', `玩家交易退款 #${ord.order_no}`),
+          DB.prepare("UPDATE player_offers SET status='open' WHERE id=? AND category='account' AND status='closed'").bind(ord.offer_id),
+        ]);
+        return ok({ status: 'cancelled' });
+      }
+      return err(4001, 'act 非法');
+    }
+
+    // ============ 玩家私聊 ============
+    // 买家发起会话 (与卖家私聊)
+    const mConvCreate = p.match(/^\/api\/player-offers\/(\d+)\/conversations$/);
+    if (mConvCreate && method === 'POST') {
+      if (!auth) return err(4010, '未登录', 401);
+      const off = await DB.prepare('SELECT * FROM player_offers WHERE id=?').bind(mConvCreate[1]).first();
+      if (!off) return err(4004, '不存在');
+      if (off.user_id === auth.uid) return err(4001, '不能与自己私聊');
+      const exist = await DB.prepare('SELECT * FROM player_conversations WHERE offer_id=? AND buyer_id=?').bind(off.id, auth.uid).first();
+      if (exist) return ok({ conversation: exist });
+      const r = await DB.prepare('INSERT INTO player_conversations(offer_id,buyer_id,seller_id) VALUES(?,?,?)')
+        .bind(off.id, auth.uid, off.user_id).run();
+      const conv = { id: r.meta.last_row_id, offer_id: off.id, buyer_id: auth.uid, seller_id: off.user_id };
+      return ok({ conversation: conv });
+    }
+    // 我的会话列表
+    if (p === '/api/conversations' && method === 'GET') {
+      if (!auth) return err(4010, '未登录', 401);
+      const rows = await DB.prepare(
+        "SELECT c.id, c.offer_id, c.buyer_id, c.seller_id, of.title, of.category, bu.username AS buyer_name, su.username AS seller_name, (SELECT content FROM player_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_msg, (SELECT MAX(id) FROM player_messages m WHERE m.conversation_id=c.id) AS last_msg_id FROM player_conversations c LEFT JOIN player_offers of ON of.id=c.offer_id LEFT JOIN users bu ON bu.id=c.buyer_id LEFT JOIN users su ON su.id=c.seller_id WHERE c.buyer_id=? OR c.seller_id=? ORDER BY last_msg_id IS NULL, last_msg_id DESC"
+      ).bind(auth.uid, auth.uid).all();
+      return ok({ conversations: rows.results });
+    }
+    // 会话消息
+    const mConv = p.match(/^\/api\/conversations\/(\d+)(?:\/messages)?$/);
+    if (mConv) {
+      const conv = await DB.prepare('SELECT * FROM player_conversations WHERE id=?').bind(mConv[1]).first();
+      if (!conv) return err(4004, '会话不存在');
+      if (conv.buyer_id !== auth.uid && conv.seller_id !== auth.uid && auth.role !== 'admin') return err(4030, '无权限', 403);
+      if (method === 'GET' && p.endsWith('/messages')) {
+        const sp = new URL(req.url).searchParams;
+        const after = Number(sp.get('after')) || 0;
+        let sql = 'SELECT m.id,m.sender_id,m.content,m.created_at,u.username FROM player_messages m LEFT JOIN users u ON u.id=m.sender_id WHERE m.conversation_id=?';
+        const vals = [conv.id];
+        if (after > 0) { sql += ' AND m.id>?'; vals.push(after); }
+        sql += ' ORDER BY m.id DESC LIMIT 100';
+        const rows = await DB.prepare(sql).bind(...vals).all();
+        return ok({ messages: rows.results.reverse() });
+      }
+      if (method === 'POST' && p.endsWith('/messages')) {
+        const b = await json(req);
+        const content = String(b.content || '').trim();
+        if (!content || content.length > 500) return err(4001, '消息内容必填且不超过 500 字');
+        const r = await DB.prepare('INSERT INTO player_messages(conversation_id,sender_id,content) VALUES(?,?,?)')
+          .bind(conv.id, auth.uid, content).run();
+        return ok({ id: r.meta.last_row_id, content });
+      }
     }
 
     // 账号记录(签到/花瓣)

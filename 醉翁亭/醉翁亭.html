@@ -189,6 +189,11 @@ const IconArrowLeft = ({ className }) => (
     <path d="M19 12 H5"/><path d="M12 19 L5 12 L12 5"/>
   </svg>
 );
+const IconChat = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 5 H20 V16 H9 L4 20 Z"/><path d="M8 9 H16"/><path d="M8 12 H13"/>
+  </svg>
+);
 
 const SealStamp = ({ text, show, onDone }) => {
   useEffect(() => {
@@ -215,6 +220,7 @@ const Navbar = ({ currentPage, setPage, user, onLogout }) => {
     { id: 'market', label: '账号市场' },
     { id: 'scripts', label: '脚本皮肤' },
     { id: 'players', label: '玩家市场' },
+    { id: 'inbox', label: '私聊' },
     { id: 'chat', label: '聊天室' },
     { id: 'me', label: '用户中心' },
     { id: 'recharge', label: '充值' },
@@ -290,8 +296,15 @@ const LoginPage = ({ onAuthed }) => {
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [invite, setInvite] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // 邀请链接直达: URL ?invite=xxx 自动填入邀请码
+  useEffect(() => {
+    const iv = new URLSearchParams(window.location.search).get('invite');
+    if (iv) setInvite(iv);
+  }, []);
 
   const submit = async () => {
     setBusy(true); setMsg('');
@@ -302,7 +315,7 @@ const LoginPage = ({ onAuthed }) => {
         localStorage.setItem('zw_user', JSON.stringify(d.user));
         onAuthed(d.user);
       } else {
-        await api('POST', '/api/auth/register', { username, password });
+        await api('POST', '/api/auth/register', { username, password, invite_code: invite.trim() || undefined });
         setMode('login'); setMsg('注册成功，请登栈');
       }
     } catch (e) { setMsg(e.message); }
@@ -329,6 +342,12 @@ const LoginPage = ({ onAuthed }) => {
             <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">密语</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="口令（至少 6 位）" className="input-scroll w-full px-4 py-3 font-serif text-ink placeholder:text-ink-light/40" />
           </div>
+          {mode === 'register' && (
+            <div>
+              <label className="block font-serif text-sm text-ink-light mb-2 tracking-widest">邀请码</label>
+              <input value={invite} onChange={e => setInvite(e.target.value)} placeholder="好友的邀请码（选填）" className="input-scroll w-full px-4 py-3 font-serif text-ink placeholder:text-ink-light/40" />
+            </div>
+          )}
           {msg && <p className="font-serif text-sm text-cinnabar">{msg}</p>}
           <button onClick={submit} disabled={busy}
             className="btn-seal w-full py-3.5 bg-amber text-white font-serif tracking-[0.3em] text-center hover:bg-amber/90 transition-colors duration-300 shadow-sm disabled:opacity-60">
@@ -1137,6 +1156,139 @@ const MarketPage = ({ setPage, user, onBuy }) => {
   );
 };
 
+/* ==================== 我的交易 ==================== */
+const OrdersMine = () => {
+  const [orders, setOrders] = useState([]);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ST = { paid: '待确认', completed: '已完成', cancelled: '已取消' };
+  const me = getUser();
+
+  const load = () => {
+    api('GET', '/api/player-orders/mine').then(d => setOrders(d.orders || [])).catch(e => setErr(e.message));
+  };
+  useEffect(() => { load(); }, []);
+
+  const confirm = async (o, as) => {
+    setBusy(true);
+    try { await api('PATCH', `/api/player-orders/${o.id}`, { act: 'confirm', as }); load(); } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      {err && <p className="font-serif text-sm text-cinnabar mb-3">{err}</p>}
+      {orders.length === 0 ? (
+        <div className="card-deckle bg-white/30 border border-tea-border p-8 text-center font-serif text-sm text-ink-light">暂无交易</div>
+      ) : (
+        <div className="space-y-3">
+          {orders.map(o => (
+            <div key={o.id} className="card-deckle bg-white/40 border border-tea-border p-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`px-2 py-0.5 text-xs border font-serif ${o.status === 'completed' ? 'border-amber/40 text-amber' : o.status === 'cancelled' ? 'border-tea-border text-ink-light/50' : 'border-cinnabar/40 text-cinnabar'}`}>{ST[o.status] || o.status}</span>
+                <span className="font-serif text-ink">{o.title}</span>
+                <span className="font-lora text-sm text-amber ml-auto">{fmt(o.amount)} 代币</span>
+              </div>
+              <p className="font-serif text-xs text-ink-light mt-2">买家：{o.buyer_name} · 卖家：{o.seller_name} · 单号 {o.order_no}</p>
+              {o.status === 'paid' && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {me && o.buyer_id === me.id && <button onClick={() => confirm(o, 'buyer')} disabled={busy} className="px-4 py-1.5 text-xs font-serif bg-amber text-white hover:bg-amber/90 disabled:opacity-60">确认到货（买家）</button>}
+                  {me && o.seller_id === me.id && <button onClick={() => confirm(o, 'seller')} disabled={busy} className="px-4 py-1.5 text-xs font-serif border border-amber/40 text-amber hover:bg-amber/5 disabled:opacity-60">确认收款（卖家）</button>}
+                  <p className="font-serif text-xs text-ink-light/60 self-center">买卖双方均确认后货款结算给卖家</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ==================== 私聊 ==================== */
+const InboxPage = () => {
+  const [convs, setConvs] = useState([]);
+  const [active, setActive] = useState(null);
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const me = getUser();
+
+  const load = () => {
+    api('GET', '/api/conversations').then(d => setConvs(d.conversations || [])).catch(e => setErr(e.message));
+  };
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    api('GET', `/api/conversations/${active.id}/messages`).then(d => setMsgs(d.messages || [])).catch(() => {});
+  }, [active]);
+
+  const openConv = (c) => { setActive(c); setMsgs([]); };
+
+  const send = async () => {
+    if (!active || !input.trim()) return;
+    setBusy(true);
+    try {
+      await api('POST', `/api/conversations/${active.id}/messages`, { content: input.trim() });
+      setInput('');
+      const d = await api('GET', `/api/conversations/${active.id}/messages`);
+      setMsgs(d.messages || []);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const peer = (c) => (me && c.buyer_id === me.id) ? c.seller_name : c.buyer_name;
+
+  return (
+    <div className="page-enter max-w-5xl mx-auto px-6 py-10">
+      <h2 className="font-brush text-4xl text-ink mb-2">私聊</h2>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">与卖家/买家商量细节</p>
+      {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="card-deckle bg-white/40 border border-tea-border p-4 md:col-span-1">
+          <h3 className="font-serif text-ink mb-3">会话</h3>
+          <div className="space-y-2">
+            {convs.map(c => (
+              <button key={c.id} onClick={() => openConv(c)}
+                className={`w-full text-left p-3 border transition-colors ${active && active.id === c.id ? 'border-amber/40 bg-amber/5' : 'border-tea-border/60 hover:border-amber/30'}`}>
+                <p className="font-serif text-sm text-ink truncate">{peer(c) || '会话'}</p>
+                <p className="font-serif text-xs text-ink-light truncate mt-1">{c.title || ''}</p>
+                {c.last_msg && <p className="font-serif text-xs text-ink-light/60 truncate mt-1">{c.last_msg}</p>}
+              </button>
+            ))}
+            {convs.length === 0 && <p className="font-serif text-xs text-ink-light text-center py-6">暂无会话，去玩家市场与卖家私聊</p>}
+          </div>
+        </div>
+        <div className="card-deckle bg-white/40 border border-tea-border p-4 md:col-span-2 flex flex-col" style={{ minHeight: 420 }}>
+          {!active ? (
+            <div className="flex-1 flex items-center justify-center font-serif text-sm text-ink-light">选择一个会话开始聊天</div>
+          ) : (
+            <>
+              <div className="flex-1 overflow-y-auto space-y-3 mb-3" style={{ maxHeight: 320 }}>
+                {msgs.map(m => (
+                  <div key={m.id} className={`flex ${m.sender_id === (me && me.id) ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] px-4 py-2 font-serif text-sm ${m.sender_id === (me && me.id) ? 'bg-amber text-white' : 'bg-white/60 border border-tea-border/60 text-ink'}`}>
+                      <p>{m.content}</p>
+                      <p className={`text-[10px] mt-1 ${m.sender_id === (me && me.id) ? 'text-white/60' : 'text-ink-light/60'}`}>{m.username || m.sender_name || ''} · {fmtTime(m.created_at)}</p>
+                    </div>
+                  </div>
+                ))}
+                {msgs.length === 0 && <p className="text-center font-serif text-xs text-ink-light py-8">暂无消息</p>}
+              </div>
+              <div className="flex gap-2">
+                <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') send(); }} placeholder="输入消息..." maxLength={500} className="input-scroll flex-1 px-4 py-2.5 font-serif" />
+                <button onClick={send} disabled={busy || !input.trim()} className="px-6 py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60">{busy ? '...' : '发送'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ==================== 用户中心 ==================== */
 const MePage = ({ user, setPage, onRefresh }) => {
   const [wallet, setWallet] = useState(null);
@@ -1212,6 +1364,11 @@ const MePage = ({ user, setPage, onRefresh }) => {
             ))}
           </div>
         )}
+      </div>
+
+      <div>
+        <h3 className="font-brush text-2xl text-ink mb-4">我的交易</h3>
+        <OrdersMine />
       </div>
 
       <div>
@@ -1375,6 +1532,7 @@ const InvitePage = ({ user }) => {
   const [code, setCode] = useState('');
   const [invited, setInvited] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     api('GET', '/api/invite/code').then(d => { setCode(d.invite_code); setInvited(d.invited || 0); }).catch(() => {});
@@ -1384,16 +1542,22 @@ const InvitePage = ({ user }) => {
     navigator.clipboard.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
   };
 
+  const copyLink = () => {
+    const link = `${location.origin}${location.pathname}?invite=${encodeURIComponent(code)}`;
+    navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000); }).catch(() => {});
+  };
+
   return (
     <div className="page-enter max-w-3xl mx-auto px-6 py-10">
       <h2 className="font-brush text-4xl text-ink mb-2">邀请</h2>
-      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">分享邀请码，让更多朋友入亭</p>
+      <p className="font-serif text-sm text-ink-light tracking-widest mb-8">分享邀请链接，让更多朋友入亭</p>
 
       <div className="card-deckle bg-white/50 border border-tea-border p-8 text-center mb-8">
         <p className="font-serif text-sm text-ink-light mb-3 tracking-widest">你的邀请码</p>
         <p className="font-lora text-4xl font-semibold text-amber tracking-[0.3em] mb-6">{code || '···'}</p>
         <div className="flex justify-center gap-3">
-          <button onClick={copy} className="px-8 py-2.5 bg-amber text-white font-serif tracking-widest hover:bg-amber/90">{copied ? '已复制' : '复制邀请码'}</button>
+          <button onClick={copy} className="px-6 py-2.5 bg-amber text-white font-serif tracking-widest hover:bg-amber/90">{copied ? '已复制' : '复制邀请码'}</button>
+          <button onClick={copyLink} className="px-6 py-2.5 bg-ink text-white font-serif tracking-widest hover:bg-ink/90">{linkCopied ? '链接已复制' : '复制邀请链接'}</button>
         </div>
         <p className="font-serif text-xs text-ink-light mt-6">已邀请 {invited} 位亭中客</p>
       </div>
@@ -1401,7 +1565,7 @@ const InvitePage = ({ user }) => {
       <div className="card-deckle bg-white/40 border border-tea-border p-6">
         <h3 className="font-serif text-ink mb-3">邀请奖励</h3>
         <p className="font-serif text-sm text-ink-light leading-relaxed">
-          新用户注册时填写你的邀请码，双方均可获得代币奖励（规则以运营公告为准）。奖励在对方完成首次签到后发放。
+          新用户点击你的邀请链接（或注册时填写你的邀请码），双方均可获得代币奖励（规则以运营公告为准）。奖励在对方完成首次签到后发放。
         </p>
       </div>
     </div>
@@ -1796,29 +1960,74 @@ const PlayersPage = ({ user, onBuy }) => {
   const [offers, setOffers] = useState([]);
   const [mine, setMine] = useState([]);
   const [err, setErr] = useState('');
-  const [form, setForm] = useState({ title: '', desc: '', kind: 'sell', price: '' });
+  const [cat, setCat] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [orderResult, setOrderResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const KIND = { sell: '出售', buy: '求购' };
+  const CATS = [
+    { id: '', label: '全部' },
+    { id: 'account', label: '出号' },
+    { id: 'resource', label: '出资源' },
+    { id: 'script', label: '出脚本' },
+  ];
+  // 发布表单 (三类切换)
+  const [fc, setFc] = useState('account');
+  const [form, setForm] = useState({ title: '', desc: '', kind: 'sell', price: '', platform: 'fengyue', account_name: '', account_password: '', account_email: '', resource_qty: '', resource_unit: 'stardust', file_url: '', file_name: '', file_tip: '' });
 
   const load = () => {
-    api('GET', '/api/player-offers').then(d => setOffers(d.offers || [])).catch(e => setErr(e.message));
+    api('GET', '/api/player-offers' + (cat ? `?category=${cat}` : '')).then(d => setOffers(d.offers || [])).catch(e => setErr(e.message));
     if (user) api('GET', '/api/player-offers/mine').then(d => setMine(d.offers || [])).catch(() => {});
   };
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); }, [user, cat]);
 
   const submit = async () => {
     if (!form.title.trim()) { setErr('请输入标题'); return; }
     setBusy(true); setErr('');
     try {
-      await api('POST', '/api/player-offers', { title: form.title, desc: form.desc, kind: form.kind, price: Number(form.price) || 0 });
-      setForm({ title: '', desc: '', kind: 'sell', price: '' });
+      const body = { title: form.title, desc: form.desc, kind: form.kind, price: Number(form.price) || 0, category: fc };
+      if (fc === 'account') {
+        body.platform = form.platform; body.account_name = form.account_name; body.account_password = form.account_password; body.account_email = form.account_email;
+        if (!form.account_name || !form.account_password) { setErr('出号需填写账号名与账号密码'); setBusy(false); return; }
+      }
+      if (fc === 'script') {
+        body.file_url = form.file_url; body.file_name = form.file_name; body.file_tip = form.file_tip;
+        if (!form.file_url) { setErr('出脚本需填写文件/网盘链接'); setBusy(false); return; }
+      }
+      if (fc === 'resource') {
+        body.desc = `平台：${PLATFORM_LABELS[form.platform] || form.platform}\n数量：${form.resource_qty || 0} ${form.resource_unit === 'stardust' ? '星尘' : '积分'}` + (form.desc ? `\n${form.desc}` : '');
+      }
+      await api('POST', '/api/player-offers', body);
+      setForm({ title: '', desc: '', kind: 'sell', price: '', platform: 'fengyue', account_name: '', account_password: '', account_email: '', resource_qty: '', resource_unit: 'stardust', file_url: '', file_name: '', file_tip: '' });
       load();
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
+
   const close = async (id) => {
     try { await api('PATCH', `/api/player-offers/${id}`, { status: 'closed' }); load(); } catch (e) { setErr(e.message); }
   };
+
+  const buy = async (o) => {
+    if (!user) { setErr('请先登栈'); return; }
+    if (o.user_id === user.id) { setErr('不能购买自己的发布'); return; }
+    setBusy(true); setErr('');
+    try {
+      const r = await api('POST', '/api/player-orders', { offer_id: o.id });
+      setOrderResult(r);
+      if (onBuy) onBuy();
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const chat = async (o) => {
+    if (!user) { setErr('请先登栈'); return; }
+    try { await api('POST', `/api/player-offers/${o.id}/conversations`, {}); setErr(''); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const catLabel = c => (CATS.find(x => x.id === c) || {}).label || c;
 
   return (
     <div className="page-enter max-w-6xl mx-auto px-6 py-10">
@@ -1826,19 +2035,44 @@ const PlayersPage = ({ user, onBuy }) => {
       <p className="font-serif text-sm text-ink-light tracking-widest mb-8">玩家之间的号、物与约定在此流通</p>
       {err && <p className="font-serif text-sm text-cinnabar mb-6">{err}</p>}
 
+      {/* 分类筛选 */}
+      <div className="flex flex-wrap gap-2 mb-8">
+        {CATS.map(c => (
+          <button key={c.id} onClick={() => setCat(c.id)}
+            className={`px-4 py-1.5 text-sm font-serif tracking-wider border transition-colors ${cat === c.id ? 'border-amber bg-amber/10 text-amber' : 'border-tea-border text-ink-light hover:border-amber/40'}`}>{c.label}</button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
         <div className="card-deckle bg-white/50 border border-tea-border p-6 lg:col-span-2">
           <h3 className="font-serif text-ink mb-4">当前发布</h3>
           <div className="space-y-3">
             {offers.map(o => (
               <div key={o.id} className="border border-tea-border/60 bg-white/30 p-4">
-                <div className="flex flex-wrap items-center gap-3 mb-1">
-                  <span className={`px-2 py-0.5 text-xs border font-serif ${o.kind === 'buy' ? 'border-tea-border text-ink-light' : 'border-amber/40 text-amber'}`}>{KIND[o.kind] || o.kind}</span>
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 text-xs border font-serif border-amber/40 text-amber">{catLabel(o.category)}</span>
+                  <span className={`px-2 py-0.5 text-xs border font-serif ${o.kind === 'buy' ? 'border-tea-border text-ink-light' : 'border-tea-border/40 text-ink-light'}`}>{KIND[o.kind] || o.kind}</span>
+                  {o.category === 'account' && o.platform && <span className="px-2 py-0.5 text-xs border border-tea-border/40 font-serif text-ink-light">{PLATFORM_LABELS[o.platform] || o.platform}</span>}
                   <span className="font-serif text-ink">{o.title}</span>
                   <span className="font-lora text-sm text-amber ml-auto">{fmt(o.price)} 代币</span>
                 </div>
-                {o.desc && <p className="font-serif text-sm text-ink-light">{o.desc}</p>}
-                <p className="font-serif text-xs text-ink-light/60 mt-2">{o.username} · {fmtTime(o.created_at)}</p>
+                {o.desc && <p className="font-serif text-sm text-ink-light whitespace-pre-wrap">{o.desc}</p>}
+                {o.category === 'account' && o.account_name && (
+                  <p className="font-serif text-xs text-ink-light mt-1">账号：{o.account_name}{o.account_email ? ` · ${o.account_email}` : ''}（拍下后交付密码）</p>
+                )}
+                {o.category === 'script' && o.file_name && (
+                  <p className="font-serif text-xs text-ink-light mt-1">附件：{o.file_name}（拍下后获取链接）</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <p className="font-serif text-xs text-ink-light/60 mr-auto">{o.username} · {fmtTime(o.created_at)}</p>
+                  <button onClick={() => setDetail(o)} className="px-3 py-1.5 text-xs font-serif border border-tea-border/60 text-ink-light hover:border-amber/40 hover:text-amber">详情</button>
+                  {user && o.user_id !== user.id && (
+                    <button onClick={() => chat(o)} className="px-3 py-1.5 text-xs font-serif border border-tea-border/60 text-ink-light hover:border-amber/40 hover:text-amber inline-flex items-center gap-1"><IconChat className="w-3 h-3" />私聊</button>
+                  )}
+                  {o.kind === 'sell' && o.price > 0 && user && o.user_id !== user.id && (
+                    <button onClick={() => buy(o)} disabled={busy} className="px-4 py-1.5 text-xs font-serif bg-amber text-white hover:bg-amber/90 disabled:opacity-60">拍下</button>
+                  )}
+                </div>
               </div>
             ))}
             {offers.length === 0 && <div className="text-center font-serif text-sm text-ink-light py-8">暂无发布</div>}
@@ -1851,8 +2085,50 @@ const PlayersPage = ({ user, onBuy }) => {
             <p className="font-serif text-sm text-ink-light mb-4">登栈后方可发布</p>
           ) : (
             <div className="space-y-4">
-              <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="标题（如：出售密丝高体验点号）" className="input-scroll w-full px-4 py-2.5 font-serif" />
-              <textarea value={form.desc} onChange={e => setForm({ ...form, desc: e.target.value })} placeholder="补充说明" rows={3} className="input-scroll w-full px-4 py-2.5 font-serif resize-none" />
+              <div className="flex gap-2">
+                {CATS.slice(1).map(c => (
+                  <button key={c.id} onClick={() => setFc(c.id)}
+                    className={`px-3 py-1.5 text-xs font-serif border tracking-wider transition-colors ${fc === c.id ? 'border-amber bg-amber/10 text-amber' : 'border-tea-border text-ink-light hover:border-amber/40'}`}>{c.label}</button>
+                ))}
+              </div>
+              <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder={`标题（如：出售密丝高体验点号）`} className="input-scroll w-full px-4 py-2.5 font-serif" />
+              {fc === 'account' && (
+                <>
+                  <select value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value })} className="input-scroll w-full px-4 py-2.5 font-serif">
+                    <option value="fengyue">风月酒馆</option>
+                    <option value="missai">密丝AI</option>
+                    <option value="aimagnet">春水酒馆</option>
+                    <option value="dzmm">DZMM</option>
+                  </select>
+                  <input value={form.account_name} onChange={e => setForm({ ...form, account_name: e.target.value })} placeholder="账号名" className="input-scroll w-full px-4 py-2.5 font-serif" />
+                  <input value={form.account_password} onChange={e => setForm({ ...form, account_password: e.target.value })} placeholder="账号密码（买家拍下后可见）" className="input-scroll w-full px-4 py-2.5 font-serif" />
+                  <input value={form.account_email} onChange={e => setForm({ ...form, account_email: e.target.value })} placeholder="绑定邮箱（选填）" className="input-scroll w-full px-4 py-2.5 font-serif" />
+                </>
+              )}
+              {fc === 'resource' && (
+                <>
+                  <select value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value })} className="input-scroll w-full px-4 py-2.5 font-serif">
+                    <option value="fengyue">风月酒馆</option>
+                    <option value="missai">密丝AI</option>
+                    <option value="aimagnet">春水酒馆</option>
+                  </select>
+                  <div className="flex gap-3">
+                    <input type="number" value={form.resource_qty} onChange={e => setForm({ ...form, resource_qty: e.target.value })} placeholder="数量" className="input-scroll flex-1 px-4 py-2.5 font-serif" />
+                    <select value={form.resource_unit} onChange={e => setForm({ ...form, resource_unit: e.target.value })} className="input-scroll px-4 py-2.5 font-serif">
+                      <option value="stardust">星尘</option>
+                      <option value="points">积分</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              {fc === 'script' && (
+                <>
+                  <input value={form.file_name} onChange={e => setForm({ ...form, file_name: e.target.value })} placeholder="附件名称（如：自动签到脚本）" className="input-scroll w-full px-4 py-2.5 font-serif" />
+                  <input value={form.file_url} onChange={e => setForm({ ...form, file_url: e.target.value })} placeholder="文件/网盘下载链接" className="input-scroll w-full px-4 py-2.5 font-serif" />
+                  <input value={form.file_tip} onChange={e => setForm({ ...form, file_tip: e.target.value })} placeholder="使用说明（选填）" className="input-scroll w-full px-4 py-2.5 font-serif" />
+                </>
+              )}
+              <textarea value={form.desc} onChange={e => setForm({ ...form, desc: e.target.value })} placeholder={fc === 'resource' ? '补充说明' : '补充说明'} rows={2} className="input-scroll w-full px-4 py-2.5 font-serif resize-none" />
               <div className="flex gap-3">
                 <select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })} className="input-scroll px-4 py-2.5 font-serif">
                   <option value="sell">出售</option>
@@ -1873,6 +2149,7 @@ const PlayersPage = ({ user, onBuy }) => {
             {mine.map(o => (
               <div key={o.id} className="border border-tea-border/60 bg-white/30 p-4 flex flex-wrap items-center gap-3">
                 <span className={`px-2 py-0.5 text-xs border font-serif ${o.status === 'open' ? 'border-amber/40 text-amber' : 'border-tea-border text-ink-light/50'}`}>{o.status === 'open' ? '发布中' : '已关闭'}</span>
+                <span className="px-2 py-0.5 text-xs border font-serif border-amber/40 text-amber">{catLabel(o.category)}</span>
                 <span className={`px-2 py-0.5 text-xs border font-serif ${o.kind === 'buy' ? 'border-tea-border text-ink-light' : 'border-amber/40 text-amber'}`}>{KIND[o.kind] || o.kind}</span>
                 <span className="font-serif text-ink">{o.title}</span>
                 <span className="font-lora text-sm text-amber">{fmt(o.price)} 代币</span>
@@ -1880,6 +2157,63 @@ const PlayersPage = ({ user, onBuy }) => {
               </div>
             ))}
             {mine.length === 0 && <div className="text-center font-serif text-sm text-ink-light py-8">尚无发布</div>}
+          </div>
+        </div>
+      )}
+
+      {/* 详情弹窗 */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 backdrop-blur-sm p-4" onClick={() => setDetail(null)}>
+          <div className="bg-rice border border-tea-border p-6 w-full max-w-lg relative" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="px-2 py-0.5 text-xs border font-serif border-amber/40 text-amber">{catLabel(detail.category)}</span>
+              <span className="font-serif text-ink text-lg">{detail.title}</span>
+              <span className="font-lora text-amber ml-auto">{fmt(detail.price)} 代币</span>
+            </div>
+            {detail.category === 'account' && (
+              <div className="space-y-1 font-serif text-sm text-ink mb-3">
+                <p>平台：{PLATFORM_LABELS[detail.platform] || detail.platform}</p>
+                {detail.account_name && <p>账号：{detail.account_name}</p>}
+                {detail.account_email && <p>邮箱：{detail.account_email}</p>}
+                <p className="text-ink-light text-xs">密码仅在拍下后交付，渠道官方自动验证受平台风控限制不可用，请自行核验。</p>
+              </div>
+            )}
+            {detail.category === 'script' && detail.file_name && (
+              <p className="font-serif text-sm text-ink mb-3">附件：{detail.file_name}（拍下后获取下载链接）</p>
+            )}
+            {detail.desc && <p className="font-serif text-sm text-ink-light whitespace-pre-wrap mb-3">{detail.desc}</p>}
+            <p className="font-serif text-xs text-ink-light/60 mb-4">{detail.username} · {fmtTime(detail.created_at)}</p>
+            {detail.kind === 'sell' && detail.price > 0 && user && detail.user_id !== user.id && (
+              <button onClick={() => { buy(detail); setDetail(null); }} disabled={busy} className="w-full py-2.5 bg-amber text-white font-serif text-sm tracking-widest hover:bg-amber/90 disabled:opacity-60">拍下此发布</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 拍下成功弹窗 (展示凭证/附件) */}
+      {orderResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 backdrop-blur-sm p-4" onClick={() => setOrderResult(null)}>
+          <div className="bg-rice border border-tea-border p-6 w-full max-w-lg relative" onClick={e => e.stopPropagation()}>
+            <h3 className="font-serif text-ink text-lg mb-3">拍下成功</h3>
+            {orderResult.category === 'account' && orderResult.account && (
+              <div className="border border-tea-border/60 bg-white/40 p-4 space-y-2 font-serif text-sm mb-4">
+                <p className="text-ink-light">平台：{PLATFORM_LABELS[orderResult.account.platform] || orderResult.account.platform}</p>
+                <p className="text-ink">账号：<span className="font-semibold">{orderResult.account.account_name}</span></p>
+                <p className="text-ink">密码：<span className="font-semibold break-all">{orderResult.account.account_password}</span></p>
+                {orderResult.account.account_email && <p className="text-ink-light">邮箱：{orderResult.account.account_email}</p>}
+                <p className="text-xs text-ink-light/60">请尽快核验并登录；双方确认到货后货款将结算给卖家。</p>
+              </div>
+            )}
+            {orderResult.category === 'script' && orderResult.file && (
+              <div className="border border-tea-border/60 bg-white/40 p-4 space-y-2 font-serif text-sm mb-4">
+                <p className="text-ink">附件：{orderResult.file.file_name || '脚本'}</p>
+                <a href={orderResult.file.file_url} target="_blank" rel="noreferrer" className="block py-2 px-3 bg-amber text-white text-center tracking-widest hover:bg-amber/90">获取文件</a>
+                {orderResult.file.file_tip && <p className="text-xs text-ink-light">{orderResult.file.file_tip}</p>}
+              </div>
+            )}
+            {orderResult.category === 'resource' && <p className="font-serif text-sm text-ink-light mb-4">资源交付由买卖双方线下约定，请通过私聊沟通。双方确认到货后货款结算给卖家。</p>}
+            <p className="font-serif text-xs text-ink-light mb-4">订单号：{orderResult.order_no}</p>
+            <button onClick={() => setOrderResult(null)} className="w-full py-2.5 border border-tea-border font-serif text-sm tracking-widest hover:border-amber/40 hover:text-amber">关闭</button>
           </div>
         </div>
       )}
@@ -2111,6 +2445,7 @@ const App = () => {
       case 'invite': return <InvitePage user={user} />;
       case 'scripts': return <ScriptsPage user={user} setPage={go} onBuy={refreshUser} />;
       case 'players': return <PlayersPage user={user} onBuy={refreshUser} />;
+      case 'inbox': return <InboxPage />;
       case 'chat': return <ChatPage user={user} setPage={go} />;
       case 'list': return <ProductListPage setPage={go} user={user} onBuy={refreshUser} />;
       case 'detail': return <ProductDetailPage id={pageParam && pageParam.id} setPage={go} user={user} onBuy={refreshUser} />;

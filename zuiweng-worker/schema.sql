@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
   balance       INTEGER NOT NULL DEFAULT 0,     -- 代币
+  ip            TEXT,                            -- 注册 IP (一 IP 一号)
   created_at    TEXT DEFAULT (datetime('now','localtime'))
 );
 
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS chunshui_accounts (
   registered_at  TEXT,
   imported_at    TEXT DEFAULT (datetime('now','localtime')),
   petals         INTEGER DEFAULT 0,
+  stardust       INTEGER DEFAULT 0,          -- 星尘 (风月签到真实代币)
   last_sign_date TEXT,
   last_sign_at   TEXT,
   last_check_at  TEXT,
@@ -44,6 +46,7 @@ CREATE TABLE IF NOT EXISTS chunshui_point_snapshots (
   account_id INTEGER NOT NULL,
   date       TEXT NOT NULL,
   petals     INTEGER NOT NULL,
+  stardust   INTEGER DEFAULT 0,              -- 星尘快照 (风月)
   UNIQUE(account_id, date)
 );
 
@@ -173,16 +176,64 @@ CREATE INDEX IF NOT EXISTS idx_products_type ON products(type, active);
 
 -- 玩家市场 (发布/求购)
 CREATE TABLE IF NOT EXISTS player_offers (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id    INTEGER NOT NULL,
-  title      TEXT NOT NULL,
-  desc       TEXT DEFAULT '',
-  kind       TEXT DEFAULT 'sell',            -- sell 出售 | buy 求购
-  price      INTEGER DEFAULT 0,              -- 代币
-  status     TEXT DEFAULT 'open',            -- open | closed
-  created_at TEXT DEFAULT (datetime('now','localtime'))
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL,
+  title           TEXT NOT NULL,
+  desc            TEXT DEFAULT '',
+  kind            TEXT DEFAULT 'sell',            -- sell 出售 | buy 求购
+  price           INTEGER DEFAULT 0,              -- 代币
+  category        TEXT DEFAULT 'account',         -- account 出号 | resource 出资源 | script 出脚本
+  status          TEXT DEFAULT 'open',            -- open | closed
+  -- 出号字段 (category=account): 渠道账号信息, 平台官方验证
+  platform        TEXT DEFAULT '',                -- 渠道: fengyue/missai/aimagnet/dzmm
+  account_name    TEXT DEFAULT '',                -- 账号名
+  account_password TEXT DEFAULT '',               -- 账号密码
+  account_email   TEXT DEFAULT '',                -- 邮箱 (可选)
+  verified        INTEGER DEFAULT 0,              -- 官方验证: 0未验证 1已验证 2验证失败
+  verify_detail   TEXT DEFAULT '',                -- 验证详情 (如 "风月酒馆 · 积分 1234")
+  -- 出脚本字段 (category=script): 文件由平台保管
+  file_url        TEXT DEFAULT '',                -- 下载链接/网盘链接
+  file_name       TEXT DEFAULT '',                -- 附件文件名
+  file_tip        TEXT DEFAULT '',                -- 购买后提示语句
+  created_at      TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_offers_status ON player_offers(status, id);
+
+-- 玩家交易订单 (托管/冻结结算)
+CREATE TABLE IF NOT EXISTS player_orders (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_no       TEXT UNIQUE,
+  offer_id       INTEGER NOT NULL,
+  buyer_id       INTEGER NOT NULL,
+  seller_id      INTEGER NOT NULL,
+  category       TEXT NOT NULL,                    -- account | resource | script
+  amount         INTEGER NOT NULL,                 -- 冻结金额
+  status         TEXT DEFAULT 'paid',              -- paid 已拍下冻结 | completed 已结算 | cancelled 已取消退款
+  buyer_confirm  INTEGER DEFAULT 0,                -- 买家确认到货
+  seller_confirm INTEGER DEFAULT 0,                -- 卖家确认交付
+  created_at     TEXT DEFAULT (datetime('now','localtime')),
+  updated_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_po_buyer ON player_orders(buyer_id, status);
+CREATE INDEX IF NOT EXISTS idx_po_seller ON player_orders(seller_id, status);
+
+-- 玩家私聊会话 (买家-卖家)
+CREATE TABLE IF NOT EXISTS player_conversations (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_id   INTEGER NOT NULL,
+  buyer_id   INTEGER NOT NULL,
+  seller_id  INTEGER NOT NULL,
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  UNIQUE(offer_id, buyer_id)
+);
+CREATE TABLE IF NOT EXISTS player_messages (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id INTEGER NOT NULL,
+  sender_id       INTEGER NOT NULL,
+  content         TEXT NOT NULL,
+  created_at      TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_pm_conv ON player_messages(conversation_id, id);
 
 -- 聊天室消息
 CREATE TABLE IF NOT EXISTS chat_messages (
