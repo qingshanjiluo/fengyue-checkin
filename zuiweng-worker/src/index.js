@@ -299,7 +299,7 @@ export default {
     if (p === '/api/player-offers' && method === 'GET') {
       const sp = new URL(req.url).searchParams;
       const cat = sp.get('category') || '';
-      let sql = "SELECT o.id,o.title,o.desc,o.kind,o.price,o.category,o.platform,o.verified,o.verify_detail,o.account_name,o.account_email,o.file_name,o.file_tip,o.created_at,u.username FROM player_offers o LEFT JOIN users u ON u.id=o.user_id WHERE o.status='open'";
+      let sql = "SELECT o.id,o.title,o.desc,o.kind,o.price,o.category,o.platform,o.verified,o.verify_detail,o.account_name,o.account_email,o.file_url,o.file_name,o.file_tip,o.created_at,u.username FROM player_offers o LEFT JOIN users u ON u.id=o.user_id WHERE o.status='open'";
       const vals = [];
       if (cat === 'account' || cat === 'resource' || cat === 'script') { sql += ' AND o.category=?'; vals.push(cat); }
       sql += ' ORDER BY o.id DESC LIMIT 100';
